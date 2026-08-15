@@ -33,6 +33,17 @@ const localIconAssets: Record<string, string> = {
   prometheus: "/manus-storage/prometheus_cb110430.svg",
   grafana: "/manus-storage/grafana_6c3cef4f.svg",
   docker: "/manus-storage/dockerhub_9e8a951b.svg",
+  "docker hub": "/manus-storage/dockerhub_9e8a951b.svg",
+  "docker compose": "/manus-storage/docker-compose_ff2f0f37.png",
+  users: "/manus-storage/users_f9a8ef34.svg",
+  "route 53": "/manus-storage/Route53_67168c7c.svg",
+  "load balancer": "/manus-storage/Load-Balancing_8a98ec80.svg",
+  ansible: "/manus-storage/ansible_b3e1f84d.svg",
+  statefulset: "/manus-storage/k8s-statefulset_77ccfde0.svg",
+  daemonset: "/manus-storage/k8s-daemonset_7fee6a65.svg",
+  configmap: "/manus-storage/k8s-configmap_dfbdecb1.svg",
+  secret: "/manus-storage/k8s-secret_81e4e27e.svg",
+  persistentvolumeclaim: "/manus-storage/k8s-persistentvolumeclaim_e16fab8c.svg",
 };
 
 const simpleIconNames: Record<string, string> = {
@@ -41,6 +52,7 @@ const simpleIconNames: Record<string, string> = {
   ansible: "siAnsible",
   mongodb: "siMongodb",
   digitalocean: "siDigitalocean",
+  bitbucket: "siBitbucket",
 };
 
 function makeSvgDataUri(path: string, hex: string, title: string) {
