@@ -15,11 +15,11 @@ export type JourneyStep = { id: string; label: string; evidence?: string; parall
 export type JourneyDefinition = { id: Exclude<JourneyMode, "overview">; title: string; summary: string; nodeIds: string[]; edgeIds: string[]; steps: JourneyStep[] };
 
 const elk = new ELK();
-const LEAF_WIDTH = 128;
+const LEAF_WIDTH = 148;
 const LEAF_HEIGHT = 154;
-const CHILD_GAP = 34;
+const CHILD_GAP = 48;
 
-type GroupId = "user-path" | "cicd" | "infrastructure" | "cluster";
+type GroupId = "user-path" | "cicd" | "infrastructure" | "cluster" | "configuration";
 type GroupDefinition = { id: GroupId; label: string; color: string; children: ExtractedComponent[] };
 type Size = { width: number; height: number };
 
@@ -79,13 +79,18 @@ function createGroups(analysis: RepositoryAnalysis): GroupDefinition[] {
   const user = analysis.relations.some((relation) => relation.source === "user" && relation.kind === "traffic" && Boolean(relation.evidence)) ? byDomain("user") : [];
   const pipeline = byDomain("pipeline");
   const infrastructure = byDomain("infrastructure");
-  const cluster = byDomain("cluster").sort((left, right) => runtimeFlowRank(left) - runtimeFlowRank(right) || left.label.localeCompare(right.label));
+  const allCluster = byDomain("cluster").sort((left, right) => runtimeFlowRank(left) - runtimeFlowRank(right) || left.label.localeCompare(right.label));
+  const configurationIcons = new Set(["ConfigMap", "Secret", "Namespace", "HorizontalPodAutoscaler", "PersistentVolumeClaim"]);
+  const cluster = allCluster.filter((component) => !configurationIcons.has(component.icon));
+  const configuration = allCluster.filter((component) => configurationIcons.has(component.icon));
   const hasObservedMonitoring = cluster.some((component) => /prometheus|grafana|monitoring|observability/i.test(`${component.label} ${component.icon}`));
+  const pipelineLabel = pipeline.some((component) => component.icon === "GitHub Actions") ? "B · PIPELINE · GITHUB ACTIONS" : pipeline.some((component) => component.icon === "GitLab") ? "B · PIPELINE · GITLAB CI" : "B · DEVOPS · PIPELINE";
   const candidateGroups: GroupDefinition[] = [
     { id: "user-path", label: "A · USER JOURNEY · LIVE PATH", color: "#4f9938", children: user },
-    { id: "cicd", label: "B · DEVOPS · BUILD & DELIVERY", color: "#7d9d36", children: pipeline },
-    { id: "infrastructure", label: "C · DEVOPS · INFRASTRUCTURE", color: "#f08b2b", children: infrastructure },
-    { id: "cluster", label: hasObservedMonitoring ? "D · DEVOPS · RUNTIME & OBSERVABILITY" : "D · DEVOPS · RUNTIME", color: "#df77b7", children: cluster },
+    { id: "cicd", label: pipelineLabel, color: "#7d9d36", children: pipeline },
+    { id: "infrastructure", label: "C · INFRASTRUCTURE · TERRAFORM & AUTOMATION", color: "#f08b2b", children: infrastructure },
+    { id: "cluster", label: hasObservedMonitoring ? "D · KUBERNETES · RUNTIME & OBSERVABILITY" : "D · KUBERNETES · RUNTIME & WORKLOADS", color: "#df77b7", children: cluster },
+    { id: "configuration", label: "E · KUBERNETES · CONFIGURATION & SECRETS", color: "#8e78c6", children: configuration },
   ];
   return candidateGroups.filter((group) => group.children.length > 0);
 }
@@ -205,19 +210,20 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
   const terminalX = positions[lastItem.id].x + lastItem.width + 110;
   const userPosition = { x: Math.max(42, Math.floor((terminalX - userWidth) / 2)), y: 34 };
   const userGroup = groups.find((group) => group.id === "user-path");
-  const nodes: ArchitectureNode[] = [
-    ...(userGroup ? [groupNode(userGroup, userPosition, sizes["user-path"]!, view)] : []),
-    serviceNode("repository", `${analysis.repository.owner}/${analysis.repository.repo}`, iconForProvider(analysis.repository.provider), { x: positions.repository.x, y: positions.repository.y + devOpsBaseY }, "devopsService"),
-    ...devOpsGroups.map((group) => groupNode(group, { x: positions[group.id].x, y: positions[group.id].y + devOpsBaseY }, sizes[group.id]!, view)),
-  ];
-
-  if (view === "detailed") groups.forEach((group) => addGroupChildren(nodes, group));
-
   const groupChildren = (id: GroupId) => groups.find((group) => group.id === id)?.children ?? [];
   const user = groupChildren("user-path");
   const pipeline = groupChildren("cicd");
   const infrastructure = groupChildren("infrastructure");
   const cluster = groupChildren("cluster");
+  const nodes: ArchitectureNode[] = [
+    ...(userGroup ? [groupNode(userGroup, userPosition, sizes["user-path"]!, view)] : []),
+    serviceNode("repository", `${analysis.repository.owner}/${analysis.repository.repo}`, iconForProvider(analysis.repository.provider), { x: positions.repository.x, y: positions.repository.y + devOpsBaseY }, "devopsService"),
+    ...(pipeline.length ? [serviceNode("devops-engineer", "DevOps Engineer", "Users", { x: positions.cicd.x, y: Math.max(42, positions.cicd.y + devOpsBaseY - LEAF_HEIGHT - 76) }, "devopsService", pipeline[0]?.evidence)] : []),
+    ...devOpsGroups.map((group) => groupNode(group, { x: positions[group.id].x, y: positions[group.id].y + devOpsBaseY }, sizes[group.id]!, view)),
+  ];
+
+  if (view === "detailed") groups.forEach((group) => addGroupChildren(nodes, group));
+
   const knownNodeIds = new Set(nodes.map((node) => node.id));
 
   if (view === "high") {
@@ -228,6 +234,10 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
 
   for (const relation of analysis.relations) {
     if (knownNodeIds.has(relation.source) && knownNodeIds.has(relation.target) && relation.evidence) edges.push(makeEdge(`extracted-${relation.id}`, relation.source, relation.target, relation.label, relation.kind, relation.evidence));
+  }
+
+  if (pipeline.length && knownNodeIds.has("devops-engineer")) {
+    edges.push(makeEdge("devops-engineer-pipeline", "devops-engineer", pipeline[0].id, "operates", "deployment", pipeline[0].evidence));
   }
 
   return { nodes, edges: Array.from(new Map(edges.map((edge) => [edge.id, edge])).values()) };

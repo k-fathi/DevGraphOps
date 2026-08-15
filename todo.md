@@ -106,3 +106,16 @@
 - [x] Verify the compact DEPI-GP pipeline layout is readable with visible directional arrows.
 
 - [x] Verify in the live DEPI-GP diagram that build jobs display GitHub Container Registry for `ghcr.io` and omit Docker Hub unless separately evidenced.
+
+## DEPI-GP Diagram Structure Redesign
+
+- [x] Inspect DEPI-GP files for evidenced Docker, Ansible, Terraform, Kubernetes workload, ReplicaSet, Secret, ConfigMap, Pod, Namespace, and service resources.
+- [x] Separate the visual canvas into a named Pipeline section, Infrastructure section, Kubernetes Runtime section, and User path without mixing GitHub Actions and GitLab CI cards.
+- [x] Render a DevOps engineer identity and a clear DevOps-to-Pipeline entry route when a sourced pipeline is present.
+- [x] Increase section and stage spacing so arrows and evidence labels remain readable in the DEPI-GP diagram.
+- [x] Verify DEPI-GP only shows the requested technology and Kubernetes resource icons when the repository files prove they exist.
+
+## DEPI-GP Resource Audit Follow-up
+
+- [x] Record which of ReplicaSet, ConfigMap, Pod, and Namespace are declared versus absent in DEPI-GP.
+- [x] Add a regression check proving DEPI-GP-style resource selection includes only evidenced Kubernetes manifests.

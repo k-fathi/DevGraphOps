@@ -78,6 +78,76 @@ describe("parsePublicRepositoryUrl", () => {
     expect(parsed.relations.map((relation) => relation.label)).toEqual(expect.arrayContaining(["Open application", "HTTPS", "Selects"]));
   });
 
+  it("keeps diverse Kubernetes configuration resource types in large repositories", () => {
+    const selected = candidatePaths([
+      ".github/workflows/ci.yml", ".gitlab-ci.yml", "backend/Dockerfile", "frontend/Dockerfile", "terraform/main.tf",
+      "k8s/config-maps/app.yml", "k8s/secrets/app.yml", "k8s/services/app.yml", "k8s/deployments/app.yml",
+      "k8s/ingress/app.yml", "k8s/statefulsets/db.yml", "k8s/hpa/app.yml", "k8s/eso/external-secret.yml",
+      "k8s/namespaces/app.yml", "k8s/replicasets/app.yml",
+    ]);
+
+    expect(selected).toEqual(expect.arrayContaining([
+      "k8s/config-maps/app.yml", "k8s/secrets/app.yml", "k8s/services/app.yml", "k8s/deployments/app.yml",
+      "k8s/ingress/app.yml", "k8s/statefulsets/db.yml", "k8s/hpa/app.yml", "k8s/eso/external-secret.yml",
+    ]));
+  });
+
+  it("does not invent ReplicaSet, Pod, or Namespace for DEPI-GP-style declared resources", () => {
+    const parsed = parseKubernetes([{ path: "k8s/declared.yml", content: `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-hpa
+` }]);
+    const labels = parsed.components.map((component) => component.label);
+
+    expect(labels).toEqual(expect.arrayContaining(["ConfigMap: app-config", "Secret: app-secret", "Service: app", "Deployment: app", "StatefulSet: database", "HorizontalPodAutoscaler: app-hpa"]));
+    expect(labels).not.toEqual(expect.arrayContaining(["ReplicaSet: app", "Pod: app", "Namespace: app"]));
+  });
+
+  it("selects only evidenced DEPI-GP Kubernetes manifest families within the analysis budget", () => {
+    const repoPaths = [
+      ".github/workflows/ci-cd.yml", "backend/Dockerfile", "frontend/Dockerfile", "terraform/main.tf", "ansible/deploy.yml",
+      "k8s/config-maps/back-cm.yml", "k8s/secrets/back-secrets.yml", "k8s/services/back-svc.yml", "k8s/deployments/back-deploy.yml",
+      "k8s/statefulsets/stateful-set.yml", "k8s/hpa/back-hpa.yaml",
+    ];
+    const selected = candidatePaths(repoPaths);
+    const selectedKubernetes = selected.filter((path) => path.startsWith("k8s/"));
+
+    expect(selectedKubernetes).toEqual(expect.arrayContaining([
+      "k8s/config-maps/back-cm.yml", "k8s/secrets/back-secrets.yml", "k8s/services/back-svc.yml",
+      "k8s/deployments/back-deploy.yml", "k8s/statefulsets/stateful-set.yml", "k8s/hpa/back-hpa.yaml",
+    ]));
+    expect(selectedKubernetes.every((path) => repoPaths.includes(path))).toBe(true);
+    expect(selectedKubernetes).not.toContain("k8s/replicasets/app.yml");
+    expect(selectedKubernetes).not.toContain("k8s/pods/app.yml");
+    expect(selectedKubernetes).not.toContain("k8s/namespaces/app.yml");
+  });
+
   it("extracts evidenced GitLab pipeline tools and stage-order arrows", () => {
     const parsed = parseKubernetes([{ path: ".gitlab-ci.yml", content: `stages: [install, build, security_scan]
 install_app:
@@ -131,6 +201,57 @@ jobs:
     expect(parsed.pipelineRelations).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "github-needs-build-security", label: "needs", evidence: ".github/workflows/ci.yml" }),
     ]));
+  });
+
+  it("extracts declared Kubernetes configuration and scaling resources with their relations", () => {
+    const parsed = parseKubernetes([{ path: "k8s/runtime.yml", content: `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          envFrom:
+            - configMapRef:
+                name: api-config
+            - secretRef:
+                name: api-secret
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-hpa
+spec:
+  scaleTargetRef:
+    name: api
+` }]);
+    const labels = parsed.components.map((component) => component.label);
+
+    expect(labels).toEqual(expect.arrayContaining(["ConfigMap: api-config", "Secret: api-secret", "Service: api", "Deployment: api", "HorizontalPodAutoscaler: api-hpa"]));
+    expect(parsed.relations.map((relation) => relation.label)).toEqual(expect.arrayContaining(["Selects", "config", "scales"]));
   });
 
   it("does not render empty evidence domains", async () => {

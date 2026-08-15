@@ -182,3 +182,9 @@ The final DEPI-GP DOM check measured 46 non-container stage/service cards with n
 The DEPI-GP workflow declares `REGISTRY: ghcr.io`, so the corrected representation is GitHub Container Registry rather than Docker Hub. A fresh in-app analysis attempt after this parser change encountered the public GitHub API rate limit; automated extraction coverage passed locally and the earlier live DEPI-GP rendering remains the visual evidence for the stage-card and arrow presentation.
 
 Live re-analysis later completed successfully. The rendered DEPI-GP DOM confirms three `GitHub Container Registry` tool icons in Docker build stages, zero `Docker Hub` tool icons, 80 in-card tool arrows, and 46 graph edge arrowheads. The diagram therefore reflects the repository's declared `ghcr.io` registry rather than inventing Docker Hub.
+
+## DEPI-GP Resource Audit — August 2026
+
+Direct inspection of the `main` branch file tree found declared ConfigMap templates and manifests (`helm/templates/configmap-*.yml`, `k8s/config-maps/*.yml`), Secret templates and manifests, Services, Deployments, a StatefulSet, and HorizontalPodAutoscaler manifests. The tree inspection found no standalone ReplicaSet, Pod, or Namespace manifest path. Repogram must therefore render the evidenced configuration and workload kinds, while omitting ReplicaSet, Pod, and Namespace for this repository rather than filling the diagram with anticipated Kubernetes objects.
+
+The bounded configuration-file selector now reserves places for distinct Kubernetes resource families and the parser test suite verifies sourced `ConfigMap → Deployment` configuration edges, `Secret → Deployment` configuration edges, and `HorizontalPodAutoscaler → Deployment` scaling edges. This is intentionally evidence-only: resource support is broad, but each repository diagram remains limited to resources declared in its selected files.

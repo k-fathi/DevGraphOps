@@ -42,6 +42,8 @@ const localIconAssets: Record<string, string> = {
   ansible: "/manus-storage/ansible_b3e1f84d.svg",
   statefulset: "/manus-storage/k8s-statefulset_77ccfde0.svg",
   daemonset: "/manus-storage/k8s-daemonset_7fee6a65.svg",
+  replicaset: "/manus-storage/k8s-replicaset_6584654f.svg",
+  namespace: "/manus-storage/k8s-namespace_b5dba387.svg",
   configmap: "/manus-storage/k8s-configmap_dfbdecb1.svg",
   secret: "/manus-storage/k8s-secret_81e4e27e.svg",
   persistentvolumeclaim: "/manus-storage/k8s-persistentvolumeclaim_e16fab8c.svg",

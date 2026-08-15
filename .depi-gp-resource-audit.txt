@@ -1,0 +1,17 @@
+helm/templates/configmap-app.yml
+helm/templates/configmap-db.yml
+helm/templates/secret-app.yml
+helm/templates/secret-db.yml
+k8s/config-maps/back-cm copy.yml
+k8s/config-maps/db-cm.yml
+k8s/config-maps/front-cm.yml
+k8s/deployments/back-deploy.yml
+k8s/deployments/front-deploy.yml
+k8s/hpa/back-hpa.yaml
+k8s/hpa/front-hpa.yaml
+k8s/secrets/back-secrets.yml
+k8s/secrets/db-secrets.yml
+k8s/services/back-svc.yml
+k8s/services/db-svc.yml
+k8s/services/front-svc.yml
+k8s/statefulsets/stateful-set.yml
