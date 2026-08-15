@@ -16,7 +16,7 @@
 - [x] ربط العلاقات المستخرجة بمسارات إضافية وشارات دلالية في الدياجرام.
 - [x] إضافة تصدير مساحة الرسم الحالية بصيغتي PNG وSVG.
 - [x] اختبار مزودات المستودعات والتصدير وحالات ملفات الإعداد غير الصالحة.
-- [ ] إنشاء نقطة حفظ وتسليم النسخة الموسعة.
+- [x] إنشاء نقطة حفظ وتسليم النسخة الموسعة.
 
 ## مسارات التشغيل لكل مخطط
 
@@ -42,7 +42,7 @@
 - [x] Audit each legacy unchecked item against the implemented Repogram code and test evidence.
 - [x] Implement or correct any item that is not fully supported in the public-repository analysis flow.
 - [x] Verify GitHub, GitLab, Bitbucket, detailed paths, and PNG/SVG export before closing the remaining tasks.
-- [ ] Save a final completion checkpoint after the audit is finished.
+- [x] Save a final completion checkpoint after the audit is finished.
 
 ## Provider Access Reliability
 
