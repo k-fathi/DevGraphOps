@@ -1,25 +1,23 @@
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
-
 /**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Best Practices, Design Guide and Common Pitfalls
+ * ArchTrace page direction: quiet operational tooling with a canvas-dominant composition,
+ * charcoal drafting surface, IBM Plex typography, and restrained cyan route signals.
  */
-export default function Home() {
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+import DevOpsArchitectureCanvas from "@/components/architecture/DevOpsArchitectureCanvas";
 
+export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
-    </div>
+    <main className="archtrace-shell">
+      <header className="archtrace-header">
+        <div className="brand-lockup" aria-label="ArchTrace">
+          <img src="/manus-storage/archtrace-mark_2c81313b.png" alt="" className="brand-lockup__mark" />
+          <div>
+            <div className="brand-lockup__name">ArchTrace</div>
+            <div className="brand-lockup__caption">من المستودع إلى خريطة التشغيل</div>
+          </div>
+        </div>
+        <div className="header-context">تحليل مستودع عام <span>•</span> v1.6</div>
+      </header>
+      <DevOpsArchitectureCanvas />
+    </main>
   );
 }
