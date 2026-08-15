@@ -6,9 +6,10 @@ import React from "react";
 import { ChevronDown, ChevronRight, CircleAlert, ExternalLink } from "lucide-react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { resolveIcon } from "@/lib/iconResolver";
+import type { PipelineExecutionState } from "@/lib/repositoryParser";
 
 export type ContainerNodeData = { label: string; color: string; collapsed: boolean; childCount: number; isPipeline?: boolean; providerIcon?: string; pipelineExpanded?: boolean; entryLabels?: string[]; terminalLabels?: string[]; parallelColumnCount?: number; independentCount?: number; onTogglePipeline?: () => void };
-export type ServiceNodeData = { label: string; icon: string; evidence?: string; tools?: string[]; journeyNumber?: number; journeyActive?: boolean; journeyDimmed?: boolean; pipelineStage?: { phase: string; parallel: boolean; independent?: boolean } };
+export type ServiceNodeData = { label: string; icon: string; evidence?: string; tools?: string[]; journeyNumber?: number; journeyActive?: boolean; journeyDimmed?: boolean; pipelineStage?: { phase: string; parallel: boolean; independent?: boolean; closing?: boolean }; executionStatus?: { state: PipelineExecutionState; reportedAt?: string; runUrl?: string } };
 type ContainerNode = Node<ContainerNodeData, "containerGroup">;
 type ServiceNode = Node<ServiceNodeData, "devopsService" | "pipelineStep">;
 
@@ -42,10 +43,12 @@ export function ContainerGroupNode({ data }: NodeProps<ContainerNode>) {
 }
 
 export function DevopsServiceNode({ data }: NodeProps<ServiceNode>) {
-  return <div className={`architecture-node ${data.journeyActive ? "architecture-node--journey-active" : ""} ${data.journeyDimmed ? "architecture-node--journey-dimmed" : ""} ${data.pipelineStage ? "architecture-node--pipeline-stage" : ""}`} title={data.evidence ? `${data.label} — evidence: ${data.evidence}` : data.label}>
+  const statusLabel: Record<PipelineExecutionState, string> = { success: "Passed", running: "Running", failed: "Failed", queued: "Queued", neutral: "Not reported" };
+  return <div className={`architecture-node ${data.journeyActive ? "architecture-node--journey-active" : ""} ${data.journeyDimmed ? "architecture-node--journey-dimmed" : ""} ${data.pipelineStage ? "architecture-node--pipeline-stage" : ""} ${data.pipelineStage?.closing ? "architecture-node--pipeline-exiting" : ""}`} title={data.evidence ? `${data.label} — evidence: ${data.evidence}` : data.label}>
     <Handle type="target" position={Position.Left} className="architecture-handle" />
     {data.journeyNumber && <span className="architecture-node__sequence" aria-label={`Journey step ${data.journeyNumber}`}>{data.journeyNumber}</span>}
     {data.pipelineStage && <div className="pipeline-stage-badge"><span>{data.pipelineStage.phase}</span>{data.pipelineStage.parallel && <em>PARALLEL</em>}</div>}
+    {data.pipelineStage && <span className={`pipeline-status pipeline-status--${data.executionStatus?.state ?? "neutral"}`} title={data.executionStatus?.reportedAt ? `Reported ${new Date(data.executionStatus.reportedAt).toLocaleString()}` : "No public execution result was reported for this stage"}>{statusLabel[data.executionStatus?.state ?? "neutral"]}</span>}
     <NodeIcon icon={data.icon} />
     <div className="architecture-node__label">{data.label}</div>
     {data.tools?.length ? <div className="architecture-node__tools" aria-label={`Tools used by ${data.label}`}>{data.tools.map((tool) => <span className="architecture-node__tool-link" key={tool}><ToolIcon tool={tool} /></span>)}</div> : null}

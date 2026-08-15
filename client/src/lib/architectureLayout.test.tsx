@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ReactFlowProvider } from "@xyflow/react";
-import { ContainerGroupNode } from "@/components/architecture/nodes";
+import { ContainerGroupNode, DevopsServiceNode } from "@/components/architecture/nodes";
 import { buildPipelinePlan } from "./architectureLayout";
 
 describe("expandable pipeline planning", () => {
@@ -57,5 +57,34 @@ describe("expandable pipeline planning", () => {
 
     await user.click(screen.getByRole("button", { name: "Expand stages" }));
     expect(onTogglePipeline).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a provider-reported execution state on an expanded stage", () => {
+    render(React.createElement(ReactFlowProvider, null, React.createElement(DevopsServiceNode, {
+      id: "deploy",
+      type: "pipelineStep",
+      data: {
+        label: "Job: deploy",
+        icon: "GitHub Actions",
+        pipelineStage: { phase: "END", parallel: false },
+        executionStatus: { state: "success", reportedAt: "2026-08-15T12:00:00.000Z" },
+      },
+    } as any)));
+
+    expect(screen.getByText("Passed")).toBeTruthy();
+  });
+
+  it("renders the visible Not reported badge when an expanded stage has no execution result", () => {
+    render(React.createElement(ReactFlowProvider, null, React.createElement(DevopsServiceNode, {
+      id: "deploy-unreported",
+      type: "pipelineStep",
+      data: {
+        label: "Job: deploy",
+        icon: "GitHub Actions",
+        pipelineStage: { phase: "END", parallel: false },
+      },
+    } as any)));
+
+    expect(screen.getByText("Not reported")).toBeTruthy();
   });
 });

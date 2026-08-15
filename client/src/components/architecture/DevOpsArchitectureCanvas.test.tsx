@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import React, { useState } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { analyzeRepositoryMock } = vi.hoisted(() => ({ analyzeRepositoryMock: vi.fn() }));
+const { analyzeRepositoryMock, pipelinePlanMock } = vi.hoisted(() => ({ analyzeRepositoryMock: vi.fn(), pipelinePlanMock: vi.fn() }));
 
 const analysis = {
   repository: { provider: "github" as const, owner: "acme", repo: "demo", branch: "main", url: "https://github.com/acme/demo" },
@@ -28,7 +28,7 @@ vi.mock("@xyflow/react", () => ({
   useEdgesState: (initial: any[]) => { const [value, setValue] = useState(initial); return [value, setValue, vi.fn()]; },
 }));
 vi.mock("@/lib/architectureLayout", () => ({
-  buildPipelinePlan: vi.fn().mockReturnValue({ columns: 0, stages: [] }),
+  buildPipelinePlan: pipelinePlanMock,
   buildArchitectureLayout: vi.fn().mockResolvedValue({
     nodes: [{ id: "service", type: "devopsService", data: { label: "Service: app", evidence: "k8s/service.yml", icon: "Service" }, position: { x: 0, y: 0 } }],
     edges: [{ id: "service-deployment", source: "service", target: "deployment", label: "Selects", data: { evidence: "k8s/service.yml", kind: "traffic" } }],
@@ -43,11 +43,12 @@ vi.mock("@/components/ui/sheet", () => ({
   SheetDescription: ({ children }: any) => <p>{children}</p>,
 }));
 
-import DevOpsArchitectureCanvas from "./DevOpsArchitectureCanvas";
+import DevOpsArchitectureCanvas, { PipelineStatusScope } from "./DevOpsArchitectureCanvas";
 
 describe("DevOpsArchitectureCanvas evidence interactions", () => {
   beforeEach(() => {
     analyzeRepositoryMock.mockResolvedValue(analysis);
+    pipelinePlanMock.mockReturnValue({ columns: 0, stages: [] });
     window.history.pushState({}, "", "/?repo=https%3A%2F%2Fgithub.com%2Facme%2Fdemo");
   });
 
@@ -64,5 +65,35 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     await user.click(screen.getByRole("button", { name: /Service: app Selects deployment/i }));
     await waitFor(() => expect(screen.getByText("Selects relationship")).toBeTruthy());
     expect(screen.getByText("Service: app → deployment")).toBeTruthy();
+  });
+
+  it("keeps the expanded Pipeline state during its exit transition", async () => {
+    analyzeRepositoryMock.mockResolvedValue({
+      ...analysis,
+      components: [...analysis.components, { id: "deploy", label: "Job: deploy", icon: "GitHub Actions", domain: "pipeline" as const, evidence: ".github/workflows/ci.yml" }],
+    });
+    render(<DevOpsArchitectureCanvas />);
+
+    const expand = await screen.findByRole("button", { name: "Pipeline: expand stages" });
+    vi.useFakeTimers();
+    fireEvent.click(expand);
+    expect(screen.getByRole("button", { name: "Pipeline: collapse stages" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pipeline: collapse stages" }));
+    expect(screen.getByRole("button", { name: "Pipeline: collapse stages" })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(230));
+    expect(screen.getByRole("button", { name: "Pipeline: expand stages" })).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it("explains that live execution status is currently GitHub Actions-only for other providers", async () => {
+    const { container } = render(<PipelineStatusScope provider="gitlab" />);
+    expect(container.textContent).toContain("Live execution status is currently available for public GitHub Actions repositories only.");
+    expect(container.textContent).toContain("Stages without a report remain neutral rather than receiving a simulated result.");
+  });
+
+  it("labels GitHub stages as Not reported when no public job result is available", async () => {
+    const { container } = render(<PipelineStatusScope provider="github" />);
+    expect(container.textContent).toContain("Colors are applied only when the public GitHub Actions API reports a recent job result.");
+    expect(container.textContent).toContain("Stages without a report remain neutral rather than receiving a simulated result.");
   });
 });

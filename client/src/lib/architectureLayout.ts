@@ -103,8 +103,8 @@ function iconForProvider(provider: RepositoryAnalysis["repository"]["provider"])
   return provider === "github" ? "GitHub" : provider === "gitlab" ? "GitLab" : "Bitbucket";
 }
 
-function serviceNode(id: string, label: string, icon: string, position: { x: number; y: number }, type: "pipelineStep" | "devopsService" = "devopsService", evidence?: string, tools?: string[], pipelineStage?: ServiceNodeData["pipelineStage"]): ArchitectureNode {
-  return { id, type, position, draggable: false, selectable: false, data: { label, icon, evidence, tools, pipelineStage }, style: { width: LEAF_WIDTH, height: LEAF_HEIGHT } };
+function serviceNode(id: string, label: string, icon: string, position: { x: number; y: number }, type: "pipelineStep" | "devopsService" = "devopsService", evidence?: string, tools?: string[], pipelineStage?: ServiceNodeData["pipelineStage"], executionStatus?: ServiceNodeData["executionStatus"]): ArchitectureNode {
+  return { id, type, position, draggable: false, selectable: false, data: { label, icon, evidence, tools, pipelineStage, executionStatus }, style: { width: LEAF_WIDTH, height: LEAF_HEIGHT } };
 }
 
 function groupNode(definition: GroupDefinition, position: { x: number; y: number }, size: Size, view: ArchitectureView, pipelineExpanded: boolean, pipelinePlan: PipelinePlan): ArchitectureNode {
@@ -189,16 +189,21 @@ async function calculateDevOpsLayout(items: Array<{ id: string; width: number; h
   return Object.fromEntries((layout.children ?? []).map((child) => [child.id, { x: child.x ?? 0, y: child.y ?? 0 }]));
 }
 
-function addGroupChildren(nodes: ArchitectureNode[], group: GroupDefinition, pipelinePlan: PipelinePlan, pipelineExpanded: boolean) {
+function normalizedJobName(value: string) {
+  return value.replace(/^Job:\s*/i, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+}
+
+function addGroupChildren(nodes: ArchitectureNode[], group: GroupDefinition, pipelinePlan: PipelinePlan, pipelineExpanded: boolean, executionStatuses: RepositoryAnalysis["pipelineExecutionStatuses"], pipelineClosing: boolean) {
   if (group.id === "cicd") {
     if (!pipelineExpanded) return;
     const placements = new Map(pipelinePlan.stages.map((stage) => [stage.id, stage]));
+    const statusByJob = new Map((executionStatuses ?? []).map((status) => [normalizedJobName(status.jobName), status]));
     for (const child of group.children) {
       const placement = placements.get(child.id);
       if (!placement) continue;
       const phase = placement.independent ? "INDEPENDENT" : placement.isStart && placement.isEnd ? "START / END" : placement.isStart ? "START" : placement.isEnd ? "END" : `STAGE ${placement.column + 1}`;
       nodes.push({
-        ...serviceNode(child.id, child.label, child.icon, { x: 38 + placement.column * (LEAF_WIDTH + 104), y: 98 + placement.row * (LEAF_HEIGHT + 38) }, "pipelineStep", child.evidence, child.tools, { phase, parallel: placement.parallel, independent: placement.independent }),
+        ...serviceNode(child.id, child.label, child.icon, { x: 38 + placement.column * (LEAF_WIDTH + 104), y: 98 + placement.row * (LEAF_HEIGHT + 38) }, "pipelineStep", child.evidence, child.tools, { phase, parallel: placement.parallel, independent: placement.independent, closing: pipelineClosing }, statusByJob.get(normalizedJobName(child.label))),
         parentId: group.id,
         extent: "parent",
         zIndex: 3,
@@ -296,7 +301,7 @@ export function buildJourneyDefinitions(analysis: RepositoryAnalysis, nodes: Arc
   ];
 }
 
-export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView, pipelineExpanded = false): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
+export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView, pipelineExpanded = false, pipelineClosing = false): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
   const groups = createGroups(analysis);
   const pipelinePlan = buildPipelinePlan(analysis);
   const sizes = Object.fromEntries(groups.map((group) => [group.id, groupSize(group, view, pipelineExpanded, pipelinePlan)])) as Partial<Record<GroupId, Size>>;
@@ -321,7 +326,7 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
     ...devOpsGroups.map((group) => groupNode(group, { x: positions[group.id].x, y: positions[group.id].y + devOpsBaseY }, sizes[group.id]!, view, pipelineExpanded, pipelinePlan)),
   ];
 
-  if (view === "detailed") groups.forEach((group) => addGroupChildren(nodes, group, pipelinePlan, pipelineExpanded));
+  if (view === "detailed") groups.forEach((group) => addGroupChildren(nodes, group, pipelinePlan, pipelineExpanded, analysis.pipelineExecutionStatuses, pipelineClosing));
 
   const knownNodeIds = new Set(nodes.map((node) => node.id));
 

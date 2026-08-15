@@ -1,7 +1,7 @@
 /** Unit coverage for the public-provider URL normalizer used by the repository-analysis service. */
 import { describe, expect, it } from "vitest";
 import { buildArchitectureLayout } from "../client/src/lib/architectureLayout";
-import { buildEvidenceSnippets, candidatePaths, parseKubernetes, parsePublicRepositoryUrl, parseTerraform } from "../client/src/lib/repositoryParser";
+import { buildEvidenceSnippets, candidatePaths, normalizeExecutionState, parseKubernetes, parsePublicRepositoryUrl, parseTerraform } from "../client/src/lib/repositoryParser";
 import { createEvidenceSelection, tokenizeEvidenceLine } from "../client/src/lib/evidencePanel";
 
 describe("parsePublicRepositoryUrl", () => {
@@ -44,6 +44,14 @@ describe("parsePublicRepositoryUrl", () => {
     expect(createEvidenceSelection(undefined, "No evidence")).toBeNull();
     expect(tokenizeEvidenceLine("kind: Deployment # application", "yaml").map((token) => token.kind)).toEqual(expect.arrayContaining(["property", "comment"]));
     expect(tokenizeEvidenceLine('resource "aws_s3_bucket" "assets" {', "terraform").map((token) => token.kind)).toEqual(expect.arrayContaining(["property", "string"]));
+  });
+
+  it("maps provider-reported GitHub Actions job states without inventing outcomes", () => {
+    expect(normalizeExecutionState("completed", "success")).toBe("success");
+    expect(normalizeExecutionState("completed", "failure")).toBe("failed");
+    expect(normalizeExecutionState("in_progress", null)).toBe("running");
+    expect(normalizeExecutionState("queued", null)).toBe("queued");
+    expect(normalizeExecutionState("completed", "skipped")).toBe("neutral");
   });
 
   it("derives the public user entry from an Ingress manifest with direct file evidence", () => {

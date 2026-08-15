@@ -50,6 +50,16 @@ export type ExtractedComponent = {
   tools?: string[];
 };
 
+export type PipelineExecutionState = "success" | "running" | "failed" | "queued" | "neutral";
+
+export type PipelineExecutionStatus = {
+  jobName: string;
+  state: PipelineExecutionState;
+  reportedAt: string;
+  runUrl?: string;
+  source: "github-actions";
+};
+
 export type ArchitectureRelation = {
   id: string;
   source: string;
@@ -74,6 +84,7 @@ export type RepositoryAnalysis = {
   components: ExtractedComponent[];
   relations: ArchitectureRelation[];
   evidenceSnippets: EvidenceSnippet[];
+  pipelineExecutionStatuses?: PipelineExecutionStatus[];
   isPreview?: boolean;
 };
 
@@ -359,6 +370,39 @@ async function getGitHubRepository(identity: Omit<RepositoryIdentity, "branch">)
   const repository = await fetchJson<{ default_branch: string; html_url: string }>(`https://api.github.com/repos/${identity.owner}/${identity.repo}`, headers);
   const tree = await fetchJson<{ tree?: Array<{ path: string; type: string }> }>(`https://api.github.com/repos/${identity.owner}/${identity.repo}/git/trees/${encodeURIComponent(repository.default_branch)}?recursive=1`, headers);
   return { branch: repository.default_branch, url: repository.html_url || identity.url, paths: prioritizeRepositoryPaths((tree.tree ?? []).filter((entry) => entry.type === "blob").map((entry) => entry.path)) };
+}
+
+export function normalizeExecutionState(status: string, conclusion: string | null | undefined): PipelineExecutionState {
+  if (status !== "completed") return ["queued", "waiting", "requested", "pending"].includes(status) ? "queued" : "running";
+  if (conclusion === "success") return "success";
+  if (["failure", "timed_out", "cancelled", "action_required"].includes(conclusion ?? "")) return "failed";
+  return "neutral";
+}
+
+async function getGitHubPipelineExecutionStatuses(identity: RepositoryIdentity): Promise<PipelineExecutionStatus[]> {
+  try {
+    const headers = { ...providerHeaders, Accept: "application/vnd.github+json" };
+    const runs = await fetchJson<{ workflow_runs?: Array<{ id: number; status: string; conclusion: string | null; updated_at: string; html_url?: string; path?: string }> }>(
+      `https://api.github.com/repos/${identity.owner}/${identity.repo}/actions/runs?branch=${encodeURIComponent(identity.branch)}&exclude_pull_requests=true&per_page=20`,
+      headers,
+    );
+    const run = runs.workflow_runs?.find((candidate) => candidate.path?.startsWith(".github/workflows/"));
+    if (!run) return [];
+    const jobs = await fetchJson<{ jobs?: Array<{ name: string; status: string; conclusion: string | null; completed_at?: string | null; started_at?: string | null; html_url?: string | null }> }>(
+      `https://api.github.com/repos/${identity.owner}/${identity.repo}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`,
+      headers,
+    );
+    return (jobs.jobs ?? []).map((job) => ({
+      jobName: job.name,
+      state: normalizeExecutionState(job.status, job.conclusion),
+      reportedAt: job.completed_at ?? job.started_at ?? run.updated_at,
+      runUrl: job.html_url ?? run.html_url,
+      source: "github-actions" as const,
+    }));
+  } catch {
+    // Execution status is supplementary live data. The evidence-only architecture still renders without it.
+    return [];
+  }
 }
 
 async function getGitLabRepository(identity: Omit<RepositoryIdentity, "branch">): Promise<RepositoryDescriptor> {
@@ -691,6 +735,7 @@ export async function analyzePublicRepository(rawUrl: string): Promise<Repositor
   const primaryPipelineRelations = yaml.pipelineRelations.filter((relation) => primaryPipelineIds.has(relation.source) && primaryPipelineIds.has(relation.target));
   const components = uniqueById([...buildBaseComponents(), ...pipelineDetails.components.slice(0, 12), ...primaryPipeline, ...terraform.components.slice(0, 12), ...yaml.components.slice(0, 24)]);
   const relations = uniqueRelations([...pipelineDetails.relations, ...primaryPipelineRelations, ...terraform.relations, ...yaml.relations]);
+  const pipelineExecutionStatuses = parsed.provider === "github" && signals.githubActions ? await getGitHubPipelineExecutionStatuses(repository) : [];
 
   return {
     repository,
@@ -700,5 +745,6 @@ export async function analyzePublicRepository(rawUrl: string): Promise<Repositor
     components,
     relations,
     evidenceSnippets: buildEvidenceSnippets(contents),
+    pipelineExecutionStatuses,
   };
 }

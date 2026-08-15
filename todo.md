@@ -146,3 +146,26 @@
 - [x] Label sourced hand-offs between stages and isolate parallel paths without crossing arrows.
 - [x] Preserve tool icons and source-file evidence within each expanded stage.
 - [x] Add interaction tests and verify the expandable Pipeline flow against DEPI-GP.
+
+## Pipeline Motion and Execution Status
+
+- [x] Add reduced-motion-safe expand and collapse animation to the Pipeline execution map and stage layout.
+- [x] Fetch recent public CI execution data when the repository provider exposes it, without inventing run outcomes.
+- [x] Map evidenced pipeline jobs to provider-reported execution states; otherwise show a clearly neutral not-reported state.
+- [x] Render accessible colored status indicators with an explanatory legend and timestamp where reported.
+- [x] Add automated coverage and verify animation and real-status behaviour against a public repository.
+
+## Pipeline Motion and Provider Scope Follow-up
+
+- [x] Add a reduced-motion-safe exit animation before the expanded Pipeline execution map and stages are removed.
+- [x] Make the status feature scope explicit as GitHub Actions-only until GitLab CI and Bitbucket Pipelines public status endpoints are implemented.
+- [x] Add coverage for the collapse transition and provider-specific neutral state messaging.
+
+## Pipeline Status Scope Test Follow-up
+
+- [x] Add a UI test for the explicit GitHub Actions-only status message on a non-GitHub pipeline.
+- [x] Add a UI test for the neutral Not reported status messaging when GitHub returns no recent job result.
+
+## Pipeline Neutral Badge Test Follow-up
+
+- [x] Add a UI test that renders a GitHub Pipeline stage without reported execution data and asserts its visible Not reported badge.

@@ -22,6 +22,10 @@ import type { RepositoryAnalysis } from "@/lib/repositoryParser";
 import { createEvidenceSelection, selectNodeEvidence, selectRelationshipEvidence, tokenizeEvidenceLine, type EvidenceSelection } from "@/lib/evidencePanel";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
+export function PipelineStatusScope({ provider }: { provider: RepositoryAnalysis["repository"]["provider"] }) {
+  return <><small>{provider === "github" ? "Colors are applied only when the public GitHub Actions API reports a recent job result." : "Live execution status is currently available for public GitHub Actions repositories only."}</small><div className="pipeline-status-legend__note">Stages without a report remain neutral rather than receiving a simulated result.</div></>;
+}
+
 export default function DevOpsArchitectureCanvas() {
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [analysis, setAnalysis] = useState<RepositoryAnalysis | null>(null);
@@ -30,12 +34,33 @@ export default function DevOpsArchitectureCanvas() {
   const [error, setError] = useState("");
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("overview");
   const [pipelineExpanded, setPipelineExpanded] = useState(false);
+  const [pipelineClosing, setPipelineClosing] = useState(false);
   const [journeys, setJourneys] = useState<JourneyDefinition[]>([]);
   const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<ArchitectureEdge>([]);
   const [flow, setFlow] = useState<ReactFlowInstance<ArchitectureNode, ArchitectureEdge> | null>(null);
   const { mutateAsync: analyzeRepository, isPending: loading } = trpc.repository.analyze.useMutation();
+  const showPipelineDetails = pipelineExpanded || pipelineClosing;
+  const togglePipeline = useCallback(() => {
+    if (!pipelineExpanded) {
+      setPipelineClosing(false);
+      setView("detailed");
+      setPipelineExpanded(true);
+      return;
+    }
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) {
+      setPipelineExpanded(false);
+      setPipelineClosing(false);
+      return;
+    }
+    setPipelineClosing(true);
+    window.setTimeout(() => {
+      setPipelineExpanded(false);
+      setPipelineClosing(false);
+    }, 230);
+  }, [pipelineExpanded]);
 
   useEffect(() => {
     if (!analysis) {
@@ -44,7 +69,7 @@ export default function DevOpsArchitectureCanvas() {
       return;
     }
     let active = true;
-    buildArchitectureLayout(analysis, view, pipelineExpanded).then((layout) => {
+    buildArchitectureLayout(analysis, view, showPipelineDetails, pipelineClosing).then((layout) => {
       if (!active) return;
       const definitions = buildJourneyDefinitions(analysis, layout.nodes, layout.edges);
       const selectedJourney = definitions.find((journey) => journey.id === journeyMode);
@@ -56,7 +81,7 @@ export default function DevOpsArchitectureCanvas() {
         if (node.type === "containerGroup") return {
           ...node,
           className: selectedJourney && !selectedNodes.has(node.id) ? "journey-node--dimmed" : selectedJourney ? "journey-node--active" : undefined,
-          data: node.id === "cicd" ? { ...node.data, onTogglePipeline: () => { setView("detailed"); setPipelineExpanded((expanded) => !expanded); } } : node.data,
+          data: node.id === "cicd" ? { ...node.data, onTogglePipeline: togglePipeline } : node.data,
         };
         return {
           ...node,
@@ -75,16 +100,16 @@ export default function DevOpsArchitectureCanvas() {
         };
       }));
       requestAnimationFrame(() => flow?.fitView({
-        nodes: pipelineExpanded ? layout.nodes.filter((node) => node.id === "cicd" || node.parentId === "cicd") : undefined,
-        padding: pipelineExpanded ? 0.1 : 0.13,
+        nodes: showPipelineDetails ? layout.nodes.filter((node) => node.id === "cicd" || node.parentId === "cicd") : undefined,
+        padding: showPipelineDetails ? 0.1 : 0.13,
         duration: 260,
-        maxZoom: pipelineExpanded ? 1.2 : 1.08,
+        maxZoom: showPipelineDetails ? 1.2 : 1.08,
       }));
     });
     return () => {
       active = false;
     };
-  }, [analysis, flow, journeyMode, pipelineExpanded, setEdges, setNodes, view]);
+  }, [analysis, flow, journeyMode, pipelineClosing, setEdges, setNodes, showPipelineDetails, togglePipeline, view]);
 
   const detectedServices = useMemo(() => analysis ? Object.values(analysis.signals).filter(Boolean).length : 0, [analysis]);
   const providerLabel = analysis?.repository.provider === "github" ? "GitHub" : analysis?.repository.provider === "gitlab" ? "GitLab" : "Bitbucket";
@@ -93,8 +118,14 @@ export default function DevOpsArchitectureCanvas() {
     if (!analysis) return [];
     const plan = buildPipelinePlan(analysis);
     const byId = new Map(analysis.components.map((component) => [component.id, component]));
-    return Array.from({ length: plan.columns }, (_, column) => plan.stages.filter((stage) => !stage.independent && stage.column === column).sort((left, right) => left.row - right.row).map((stage) => ({ ...stage, label: byId.get(stage.id)?.label ?? stage.id })));
+    const normalizedJobName = (value: string) => value.replace(/^Job:\s*/i, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+    const statuses = new Map((analysis.pipelineExecutionStatuses ?? []).map((status) => [normalizedJobName(status.jobName), status]));
+    return Array.from({ length: plan.columns }, (_, column) => plan.stages.filter((stage) => !stage.independent && stage.column === column).sort((left, right) => left.row - right.row).map((stage) => {
+      const label = byId.get(stage.id)?.label ?? stage.id;
+      return { ...stage, label, status: statuses.get(normalizedJobName(label)) };
+    }));
   }, [analysis]);
+  const executionStatusLabel = (state: "success" | "running" | "failed" | "queued" | "neutral") => ({ success: "Passed", running: "Running", failed: "Failed", queued: "Queued", neutral: "Not reported" })[state];
   const relationshipEvidence = useMemo(() => {
     const labels = new Map(nodes.map((node) => [node.id, node.data.label]));
     return edges.flatMap((edge) => edge.data?.evidence ? [{ id: edge.id, source: labels.get(edge.source) ?? edge.source, target: labels.get(edge.target) ?? edge.target, label: String(edge.label ?? "relates to"), evidence: edge.data.evidence }] : []);
@@ -114,8 +145,7 @@ export default function DevOpsArchitectureCanvas() {
 
   const onJourneyNodeClick = useCallback((_event: React.MouseEvent, node: ArchitectureNode) => {
     if (node.id === "cicd") {
-      setView("detailed");
-      setPipelineExpanded((expanded) => !expanded);
+      togglePipeline();
       return;
     }
     if (node.type !== "containerGroup") {
@@ -124,7 +154,7 @@ export default function DevOpsArchitectureCanvas() {
     }
     if (node.id === "user") selectJourney("user");
     if (node.id === "repository") selectJourney("devops");
-  }, [openEvidence, selectJourney]);
+  }, [openEvidence, selectJourney, togglePipeline]);
 
   const runAnalysis = useCallback(async (targetUrl: string) => {
     setError("");
@@ -135,6 +165,7 @@ export default function DevOpsArchitectureCanvas() {
       setAnalysis(result);
       setJourneyMode("overview");
       setPipelineExpanded(false);
+      setPipelineClosing(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "An unexpected error occurred while analyzing the repository.");
     }
@@ -228,7 +259,7 @@ export default function DevOpsArchitectureCanvas() {
           <button className={view === "high" ? "is-active" : ""} onClick={() => setView("high")} aria-pressed={view === "high"}>High-level view</button>
           <button className={view === "detailed" ? "is-active" : ""} onClick={() => setView("detailed")} aria-pressed={view === "detailed"}>Detailed view</button>
         </div>
-        {analysis.components.some((component) => component.domain === "pipeline") && <button className="pipeline-toolbar-toggle" onClick={() => { setView("detailed"); setPipelineExpanded((expanded) => !expanded); }} aria-expanded={pipelineExpanded}>{pipelineExpanded ? "Pipeline: collapse stages" : "Pipeline: expand stages"}</button>}
+        {analysis.components.some((component) => component.domain === "pipeline") && <button className="pipeline-toolbar-toggle" onClick={togglePipeline} aria-expanded={pipelineExpanded}>{pipelineExpanded ? "Pipeline: collapse stages" : "Pipeline: expand stages"}</button>}
         <div className="workspace-toolbar__signal"><span className="signal-dot" />{detectedServices} signals · {analysis.relations.length} relationships</div>
         <div className="export-actions" aria-label="Diagram export">
           <span><Download size={13} /> Export</span>
@@ -244,9 +275,10 @@ export default function DevOpsArchitectureCanvas() {
           <button className={journeyMode === "devops" ? "is-active" : ""} onClick={() => selectJourney("devops")}>Trace DevOps Journey</button>
         </div>
         <div className="journey-console__explanation">{activeJourney ? activeJourney.summary : "Select a journey to dim unrelated services and reveal its exact ordered route."}</div>
-        {pipelineExpanded && pipelineFlow.length > 0 && <section className="pipeline-execution-map" aria-label="Expanded pipeline execution map">
+        {showPipelineDetails && pipelineFlow.length > 0 && <section className={`pipeline-execution-map ${pipelineClosing ? "pipeline-execution-map--closing" : ""}`} aria-label="Expanded pipeline execution map">
           <header><strong>PIPELINE EXECUTION MAP</strong><span>Read left to right. Each column is an evidenced hand-off; stacked cards run in parallel.</span></header>
-          <div className="pipeline-execution-map__phases">{pipelineFlow.map((stages, index) => <React.Fragment key={`phase-${index}`}><ol className="pipeline-execution-map__phase"><li className="pipeline-execution-map__phase-label">{index === 0 ? "START" : `HAND-OFF ${index}`}{stages.length > 1 && <em>PARALLEL</em>}</li>{stages.map((stage) => <li key={stage.id}>{stage.label}</li>)}</ol>{index < pipelineFlow.length - 1 && <span className="pipeline-execution-map__arrow" aria-hidden="true">→</span>}</React.Fragment>)}</div>
+          <div className="pipeline-status-legend" aria-label="Pipeline execution status legend"><span className="pipeline-execution-map__status pipeline-execution-map__status--success">Passed</span><span className="pipeline-execution-map__status pipeline-execution-map__status--running">Running</span><span className="pipeline-execution-map__status pipeline-execution-map__status--failed">Failed</span><span className="pipeline-execution-map__status pipeline-execution-map__status--queued">Queued</span><PipelineStatusScope provider={analysis.repository.provider} /></div>
+          <div className="pipeline-execution-map__phases">{pipelineFlow.map((stages, index) => <React.Fragment key={`phase-${index}`}><ol className="pipeline-execution-map__phase"><li className="pipeline-execution-map__phase-label">{index === 0 ? "START" : `HAND-OFF ${index}`}{stages.length > 1 && <em>PARALLEL</em>}</li>{stages.map((stage) => <li key={stage.id}><span>{stage.label}</span><i className={`pipeline-execution-map__status pipeline-execution-map__status--${stage.status?.state ?? "neutral"}`} title={stage.status?.reportedAt ? `Reported ${new Date(stage.status.reportedAt).toLocaleString()}` : "No public execution result was reported"}>{executionStatusLabel(stage.status?.state ?? "neutral")}</i></li>)}</ol>{index < pipelineFlow.length - 1 && <span className="pipeline-execution-map__arrow" aria-hidden="true">→</span>}</React.Fragment>)}</div>
         </section>}
         {activeJourney && <ol className="journey-steps" aria-label={`${activeJourney.title} stages`}>
           {activeJourney.steps.map((step, index) => <li className={step.parallel ? "is-parallel" : ""} key={`${step.id}-${index}`} title={step.evidence ? `Evidence: ${step.evidence}` : step.label}>
