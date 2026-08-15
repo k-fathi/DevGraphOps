@@ -48,6 +48,7 @@ export type ExtractedComponent = {
   domain: ArchitectureDomain;
   evidence?: string;
   tools?: string[];
+  namespace?: string;
 };
 
 export type PipelineExecutionState = "success" | "running" | "failed" | "queued" | "neutral";
@@ -92,7 +93,7 @@ type JsonRecord = Record<string, unknown>;
 type RepositoryDescriptor = { branch: string; url: string; paths: string[]; fetchRef?: string };
 type ContentFile = { path: string; content: string };
 type TerraformBlock = { key: string; id: string; body: string; path: string; label: string; icon: string };
-type KubernetesResource = { id: string; kind: string; name: string; source: string; data: JsonRecord };
+type KubernetesResource = { id: string; kind: string; name: string; namespace?: string; source: string; data: JsonRecord };
 
 // Conservative limits keep public, unauthenticated provider APIs responsive while still surfacing core deployment evidence.
 const MAX_TREE_ENTRIES = 800;
@@ -455,11 +456,11 @@ async function getBitbucketRepository(identity: Omit<RepositoryIdentity, "branch
 async function fetchConfigFile(identity: RepositoryIdentity, path: string): Promise<ContentFile | undefined> {
   try {
     if (identity.provider === "github") {
-      const response = await fetch(`https://api.github.com/repos/${identity.owner}/${identity.repo}/contents/${encodedPath(path)}?ref=${encodeURIComponent(identity.branch)}`, { headers: { ...providerHeaders, Accept: "application/vnd.github+json" } });
+      const response = await fetch(`https://raw.githubusercontent.com/${identity.owner}/${identity.repo}/${encodeURIComponent(identity.branch)}/${encodedPath(path)}`, { headers: providerHeaders });
       if (!response.ok) return undefined;
-      const file = (await response.json()) as { content?: string; size?: number };
-      if (!file.content || (file.size ?? 0) > MAX_FILE_BYTES) return undefined;
-      return { path, content: decodeContent(file.content).slice(0, MAX_FILE_BYTES) };
+      const size = Number(response.headers.get("content-length") || 0);
+      if (size > MAX_FILE_BYTES) return undefined;
+      return { path, content: (await response.text()).slice(0, MAX_FILE_BYTES) };
     }
 
     const base = identity.provider === "gitlab"
@@ -558,6 +559,7 @@ export function parseKubernetes(files: ContentFile[]) {
   const resources: KubernetesResource[] = [];
   const pipelineStages: ExtractedComponent[] = [];
   const pipelineRelations: ArchitectureRelation[] = [];
+  const pipelineManifestReferences: Array<{ stageId: string; paths: string[]; evidence: string }> = [];
   const containerPattern = /docker\.io|hub\.docker\.com|registry-1\.docker\.io/i;
 
   for (const file of files.filter((entry) => /\.ya?ml$/i.test(entry.path))) {
@@ -608,6 +610,8 @@ export function parseKubernetes(files: ContentFile[]) {
         const job = asRecord(candidate);
         pipelineStages.push({ id, label: `Job: ${name}`, icon: "GitHub Actions", domain: "pipeline", evidence: file.path, tools: job ? githubWorkflowToolLabels(job, workflowHasGhcr) : [] });
         referencedNames(job?.needs).forEach((dependency) => pipelineRelations.push({ id: `github-needs-${slug(dependency)}-${slug(name)}`, source: `github-job-${slug(dependency)}`, target: id, label: "needs", kind: "deployment", evidence: file.path }));
+        const manifestPaths = Array.from(JSON.stringify(job ?? {}).matchAll(/(?:^|[^a-z0-9_])((?:k8s|kubernetes)\/[a-z0-9_./-]+\.ya?ml)\b/gi)).map((match) => match[1]).filter((path): path is string => Boolean(path));
+        if (manifestPaths.length) pipelineManifestReferences.push({ stageId: id, paths: Array.from(new Set(manifestPaths)), evidence: file.path });
       }
     }
     if (/docker-compose/i.test(lowerPath)) {
@@ -630,13 +634,15 @@ export function parseKubernetes(files: ContentFile[]) {
       const normalizedKind = kind.toLowerCase();
       if (!["ingress", "service", "deployment", "statefulset", "daemonset", "replicaset", "pod", "configmap", "secret", "persistentvolumeclaim", "namespace", "horizontalpodautoscaler", "externalsecret"].includes(normalizedKind)) continue;
       const id = `k8s-${slug(kind)}-${slug(name)}-${slug(file.path)}`;
-      resources.push({ id, kind, name, source: file.path, data: record });
+      const namespace = normalizedKind === "namespace" ? name : asString(metadata?.namespace) || undefined;
+      resources.push({ id, kind, name, namespace, source: file.path, data: record });
       const icon = normalizedKind === "statefulset" ? "StatefulSet" : normalizedKind === "daemonset" ? "DaemonSet" : normalizedKind === "replicaset" ? "ReplicaSet" : normalizedKind === "horizontalpodautoscaler" ? "HorizontalPodAutoscaler" : normalizedKind === "externalsecret" ? "Secret" : normalizedKind === "namespace" ? "Namespace" : kind;
-      components.push({ id, label: `${kind}: ${name}`, icon, domain: "cluster", evidence: file.path });
+      components.push({ id, label: `${kind}: ${name}`, icon, domain: "cluster", evidence: file.path, namespace });
     }
   }
 
-  const byKindAndName = new Map(resources.map((resource) => [`${resource.kind.toLowerCase()}:${resource.name}`, resource]));
+  const resourceKey = (kind: string, name: string, namespace?: string) => `${kind.toLowerCase()}:${namespace ?? "_cluster"}:${name}`;
+  const byKindAndName = new Map(resources.map((resource) => [resourceKey(resource.kind, resource.name, resource.namespace), resource]));
   const workloadKinds = new Set(["deployment", "statefulset", "daemonset", "replicaset", "pod"]);
   for (const resource of resources) {
     const spec = asRecord(resource.data.spec);
@@ -650,7 +656,7 @@ export function parseKubernetes(files: ContentFile[]) {
           const backend = asRecord(asRecord(path)?.backend);
           const service = asRecord(backend?.service);
           const serviceName = asString(service?.name);
-          const target = byKindAndName.get(`service:${serviceName}`);
+          const target = byKindAndName.get(resourceKey("service", serviceName, resource.namespace));
           if (target) relations.push({ id: `${resource.id}-${target.id}`, source: resource.id, target: target.id, label: "HTTPS", kind: "traffic", evidence: resource.source });
         }
       }
@@ -662,7 +668,7 @@ export function parseKubernetes(files: ContentFile[]) {
       }
       const selector = asRecord(spec?.selector);
       if (selector) {
-        for (const workload of resources.filter((candidate) => workloadKinds.has(candidate.kind.toLowerCase()))) {
+        for (const workload of resources.filter((candidate) => workloadKinds.has(candidate.kind.toLowerCase()) && candidate.namespace === resource.namespace)) {
           const template = asRecord(asRecord(workload.data.spec)?.template);
           const labels = asRecord(asRecord(template?.metadata)?.labels);
           const isMatch = labels && Object.entries(selector).every(([key, value]) => labels[key] === value);
@@ -681,14 +687,34 @@ export function parseKubernetes(files: ContentFile[]) {
       })
       .filter(Boolean);
     for (const reference of Array.from(new Set(references))) {
-      const target = byKindAndName.get(`configmap:${reference}`) ?? byKindAndName.get(`secret:${reference}`);
+      const target = byKindAndName.get(resourceKey("configmap", reference, resource.namespace)) ?? byKindAndName.get(resourceKey("secret", reference, resource.namespace));
       if (target) relations.push({ id: `${target.id}-${resource.id}`, source: target.id, target: resource.id, label: "config", kind: "dependency", evidence: resource.source });
     }
     if (resource.kind.toLowerCase() === "horizontalpodautoscaler") {
       const targetRef = asRecord(spec?.scaleTargetRef);
       const targetName = asString(targetRef?.name);
-      const target = resources.find((candidate) => workloadKinds.has(candidate.kind.toLowerCase()) && candidate.name === targetName);
+      const target = resources.find((candidate) => workloadKinds.has(candidate.kind.toLowerCase()) && candidate.name === targetName && candidate.namespace === resource.namespace);
       if (target) relations.push({ id: `${resource.id}-${target.id}`, source: resource.id, target: target.id, label: "scales", kind: "dependency", evidence: resource.source });
+    }
+  }
+
+  const namespaceResources = resources.filter((resource) => resource.kind.toLowerCase() === "namespace");
+  const namespaceScopes = new Map<string, KubernetesResource[]>();
+  for (const resource of resources.filter((resource) => resource.kind.toLowerCase() !== "namespace" && resource.namespace)) {
+    namespaceScopes.set(resource.namespace!, [...(namespaceScopes.get(resource.namespace!) ?? []), resource]);
+  }
+  for (const [namespace, scopedResources] of Array.from(namespaceScopes.entries())) {
+    const explicitNamespace = namespaceResources.find((resource) => resource.name === namespace);
+    if (!explicitNamespace) continue;
+    const scopeId = explicitNamespace.id;
+    for (const resource of scopedResources) {
+      relations.push({ id: `namespace-contains-${scopeId}-${resource.id}`, source: scopeId, target: resource.id, label: "contains", kind: "dependency", evidence: resource.source });
+    }
+  }
+
+  for (const reference of pipelineManifestReferences) {
+    for (const resource of resources.filter((candidate) => reference.paths.some((path) => candidate.source.toLowerCase() === path.toLowerCase()))) {
+      relations.push({ id: `pipeline-manifest-${reference.stageId}-${resource.id}`, source: reference.stageId, target: resource.id, label: "updates manifest", kind: "deployment", evidence: reference.evidence });
     }
   }
 

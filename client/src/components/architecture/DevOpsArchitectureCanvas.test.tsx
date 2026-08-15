@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import React, { useState } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { analyzeRepositoryMock, pipelinePlanMock } = vi.hoisted(() => ({ analyzeRepositoryMock: vi.fn(), pipelinePlanMock: vi.fn() }));
+const { analyzeRepositoryMock, pipelinePlanMock, layoutMock } = vi.hoisted(() => ({ analyzeRepositoryMock: vi.fn(), pipelinePlanMock: vi.fn(), layoutMock: vi.fn() }));
 
 const analysis = {
   repository: { provider: "github" as const, owner: "acme", repo: "demo", branch: "main", url: "https://github.com/acme/demo" },
@@ -29,10 +29,7 @@ vi.mock("@xyflow/react", () => ({
 }));
 vi.mock("@/lib/architectureLayout", () => ({
   buildPipelinePlan: pipelinePlanMock,
-  buildArchitectureLayout: vi.fn().mockResolvedValue({
-    nodes: [{ id: "service", type: "devopsService", data: { label: "Service: app", evidence: "k8s/service.yml", icon: "Service" }, position: { x: 0, y: 0 } }],
-    edges: [{ id: "service-deployment", source: "service", target: "deployment", label: "Selects", data: { evidence: "k8s/service.yml", kind: "traffic" } }],
-  }),
+  buildArchitectureLayout: layoutMock,
   buildJourneyDefinitions: vi.fn().mockReturnValue([]),
 }));
 vi.mock("@/components/ui/sheet", () => ({
@@ -47,8 +44,14 @@ import DevOpsArchitectureCanvas, { PipelineStatusScope } from "./DevOpsArchitect
 
 describe("DevOpsArchitectureCanvas evidence interactions", () => {
   beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
     analyzeRepositoryMock.mockResolvedValue(analysis);
     pipelinePlanMock.mockReturnValue({ columns: 0, stages: [] });
+    layoutMock.mockResolvedValue({
+      nodes: [{ id: "service", type: "devopsService", data: { label: "Service: app", evidence: "k8s/service.yml", icon: "Service" }, position: { x: 0, y: 0 } }],
+      edges: [{ id: "service-deployment", source: "service", target: "deployment", label: "Selects", data: { evidence: "k8s/service.yml", kind: "traffic" } }],
+    });
     window.history.pushState({}, "", "/?repo=https%3A%2F%2Fgithub.com%2Facme%2Fdemo");
   });
 
@@ -83,6 +86,16 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     act(() => vi.advanceTimersByTime(230));
     expect(screen.getByRole("button", { name: "Pipeline: expand stages" })).toBeTruthy();
     vi.useRealTimers();
+  });
+
+  it("rebuilds the diagram in expanded Cluster mode when Kubernetes topology is opened", async () => {
+    const user = userEvent.setup();
+    render(<DevOpsArchitectureCanvas />);
+
+    const clusterToggles = await screen.findAllByRole("button", { name: "Kubernetes: expand topology" });
+    await user.click(clusterToggles.at(-1)!);
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, []));
+    expect(screen.getAllByRole("button", { name: "Kubernetes: collapse topology" }).length).toBeGreaterThan(0);
   });
 
   it("explains that live execution status is currently GitHub Actions-only for other providers", async () => {

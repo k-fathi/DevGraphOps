@@ -19,11 +19,13 @@ const LEAF_WIDTH = 148;
 const LEAF_HEIGHT = 154;
 const CHILD_GAP = 48;
 
-type GroupId = "user-path" | "cicd" | "infrastructure" | "cluster" | "configuration";
+type GroupId = "user-path" | "cicd" | "infrastructure" | "cluster";
 type GroupDefinition = { id: GroupId; label: string; color: string; children: ExtractedComponent[]; icon?: string };
 type Size = { width: number; height: number };
 export type PipelineStagePlacement = { id: string; column: number; row: number; parallel: boolean; isStart: boolean; isEnd: boolean; independent: boolean };
 export type PipelinePlan = { stages: PipelineStagePlacement[]; columns: number; rows: number; entryLabels: string[]; terminalLabels: string[]; independentCount: number };
+export type KubernetesPlacement = { id: string; column: number; row: number; layer: string; namespaceId?: string; isNamespace: boolean };
+export type KubernetesPlan = { placements: KubernetesPlacement[]; columns: number; rows: number; namespaceCount: number; unscopedCount: number };
 
 export function buildPipelinePlan(analysis: Pick<RepositoryAnalysis, "components" | "relations">): PipelinePlan {
   const pipeline = analysis.components.filter((component) => component.domain === "pipeline");
@@ -88,11 +90,52 @@ export function buildPipelinePlan(analysis: Pick<RepositoryAnalysis, "components
   };
 }
 
-function groupSize(group: GroupDefinition, view: ArchitectureView, pipelineExpanded: boolean, pipelinePlan: PipelinePlan) {
+function kubernetesLayer(component: ExtractedComponent) {
+  if (component.icon === "Ingress" || component.icon === "Load Balancer") return { rank: 0, label: "INGRESS" };
+  if (component.icon === "Service") return { rank: 1, label: "SERVICE" };
+  if (["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Pod"].includes(component.icon)) return { rank: 2, label: "WORKLOAD" };
+  if (["ConfigMap", "Secret", "PersistentVolumeClaim", "HorizontalPodAutoscaler"].includes(component.icon)) return { rank: 3, label: "CONFIG & SECRETS" };
+  return { rank: 4, label: "RESOURCE" };
+}
+
+export function buildKubernetesPlan(analysis: Pick<RepositoryAnalysis, "components">, clusterExpanded: boolean, expandedNamespaceIds: string[] = []): KubernetesPlan {
+  const resources = analysis.components.filter((component) => component.domain === "cluster");
+  const namespaces = resources.filter((component) => component.icon === "Namespace");
+  if (!clusterExpanded) return { placements: [], columns: 1, rows: 1, namespaceCount: namespaces.length, unscopedCount: resources.filter((component) => component.icon !== "Namespace" && !component.namespace).length };
+  const expanded = new Set(expandedNamespaceIds);
+  const placements: KubernetesPlacement[] = namespaces.map((component, index) => ({ id: component.id, column: index, row: 0, layer: "NAMESPACE", isNamespace: true }));
+  const visibleResources = resources.filter((component) => component.icon !== "Namespace" && (namespaces.length === 0 || !component.namespace || expanded.has(`namespace:${component.namespace}`)));
+  if (namespaces.length === 0) {
+    const rowsByLayer = new Map<number, number>();
+    for (const component of visibleResources.sort((left, right) => kubernetesLayer(left).rank - kubernetesLayer(right).rank || left.label.localeCompare(right.label))) {
+      const { rank, label } = kubernetesLayer(component);
+      const row = rowsByLayer.get(rank) ?? 0;
+      rowsByLayer.set(rank, row + 1);
+      placements.push({ id: component.id, column: rank, row, layer: label, isNamespace: false });
+    }
+    return { placements, columns: Math.max(1, ...placements.map((placement) => placement.column + 1)), rows: Math.max(1, ...placements.map((placement) => placement.row + 1)), namespaceCount: 0, unscopedCount: visibleResources.length };
+  }
+  const resourceColumns = new Map<string, number>();
+  let nextColumn = namespaces.length;
+  for (const namespace of namespaces) resourceColumns.set(namespace.namespace ?? namespace.label.replace(/^Namespace(?: scope)?:\s*/i, ""), nextColumn++);
+  const unscopedColumn = namespaces.length ? nextColumn++ : 0;
+  const rowsByColumn = new Map<number, number>();
+  for (const component of visibleResources.sort((left, right) => kubernetesLayer(left).rank - kubernetesLayer(right).rank || left.label.localeCompare(right.label))) {
+    const column = component.namespace && resourceColumns.has(component.namespace) ? resourceColumns.get(component.namespace)! : unscopedColumn;
+    const row = (rowsByColumn.get(column) ?? 0) + 1;
+    rowsByColumn.set(column, row);
+    placements.push({ id: component.id, column, row, layer: kubernetesLayer(component).label, namespaceId: component.namespace ? `namespace:${component.namespace}` : undefined, isNamespace: false });
+  }
+  return { placements, columns: Math.max(1, ...placements.map((placement) => placement.column + 1)), rows: Math.max(1, ...placements.map((placement) => placement.row + 1)), namespaceCount: namespaces.length, unscopedCount: visibleResources.filter((component) => !component.namespace).length };
+}
+
+function groupSize(group: GroupDefinition, view: ArchitectureView, pipelineExpanded: boolean, pipelinePlan: PipelinePlan, clusterExpanded: boolean, kubernetesPlan: KubernetesPlan) {
   const children = group.children;
   if (view === "high") return { width: 172, height: 110 };
   if (group.id === "cicd" && !pipelineExpanded) return { width: 350, height: 194 };
   if (group.id === "cicd") return { width: Math.max(680, 64 + pipelinePlan.columns * (LEAF_WIDTH + 104)), height: 128 + pipelinePlan.rows * (LEAF_HEIGHT + 38) };
+  if (group.id === "cluster" && !clusterExpanded) return { width: 382, height: 194 };
+  if (group.id === "cluster") return { width: Math.max(420, 72 + kubernetesPlan.columns * (LEAF_WIDTH + 68)), height: 128 + kubernetesPlan.rows * (LEAF_HEIGHT + 42) };
   const maxColumns = children.every((child) => child.domain === "pipeline") ? 4 : 3;
   const columns = Math.max(1, Math.min(children.length || 1, maxColumns));
   const rows = Math.max(1, Math.ceil(Math.max(children.length, 1) / maxColumns));
@@ -103,12 +146,13 @@ function iconForProvider(provider: RepositoryAnalysis["repository"]["provider"])
   return provider === "github" ? "GitHub" : provider === "gitlab" ? "GitLab" : "Bitbucket";
 }
 
-function serviceNode(id: string, label: string, icon: string, position: { x: number; y: number }, type: "pipelineStep" | "devopsService" = "devopsService", evidence?: string, tools?: string[], pipelineStage?: ServiceNodeData["pipelineStage"], executionStatus?: ServiceNodeData["executionStatus"]): ArchitectureNode {
-  return { id, type, position, draggable: false, selectable: false, data: { label, icon, evidence, tools, pipelineStage, executionStatus }, style: { width: LEAF_WIDTH, height: LEAF_HEIGHT } };
+function serviceNode(id: string, label: string, icon: string, position: { x: number; y: number }, type: "pipelineStep" | "devopsService" = "devopsService", evidence?: string, tools?: string[], pipelineStage?: ServiceNodeData["pipelineStage"], executionStatus?: ServiceNodeData["executionStatus"], kubernetesStage?: ServiceNodeData["kubernetesStage"]): ArchitectureNode {
+  return { id, type, position, draggable: false, selectable: false, data: { label, icon, evidence, tools, pipelineStage, executionStatus, kubernetesStage }, style: { width: LEAF_WIDTH, height: LEAF_HEIGHT } };
 }
 
-function groupNode(definition: GroupDefinition, position: { x: number; y: number }, size: Size, view: ArchitectureView, pipelineExpanded: boolean, pipelinePlan: PipelinePlan): ArchitectureNode {
+function groupNode(definition: GroupDefinition, position: { x: number; y: number }, size: Size, view: ArchitectureView, pipelineExpanded: boolean, pipelinePlan: PipelinePlan, clusterExpanded: boolean, kubernetesPlan: KubernetesPlan): ArchitectureNode {
   const isPipeline = definition.id === "cicd";
+  const isCluster = definition.id === "cluster";
   return {
     id: definition.id,
     type: "containerGroup",
@@ -119,7 +163,7 @@ function groupNode(definition: GroupDefinition, position: { x: number; y: number
     data: {
       label: definition.label,
       color: definition.color,
-      collapsed: view === "high" || (isPipeline && !pipelineExpanded),
+      collapsed: view === "high" || (isPipeline && !pipelineExpanded) || (isCluster && !clusterExpanded),
       childCount: definition.children.length,
       isPipeline,
       providerIcon: definition.icon,
@@ -128,6 +172,10 @@ function groupNode(definition: GroupDefinition, position: { x: number; y: number
       terminalLabels: pipelinePlan.terminalLabels,
       parallelColumnCount: pipelinePlan.stages.filter((stage) => stage.parallel).length,
       independentCount: pipelinePlan.independentCount,
+      isCluster,
+      clusterExpanded: isCluster && clusterExpanded && view === "detailed",
+      namespaceCount: kubernetesPlan.namespaceCount,
+      unscopedCount: kubernetesPlan.unscopedCount,
     },
     style: { width: size.width, height: size.height },
   };
@@ -161,9 +209,7 @@ function createGroups(analysis: RepositoryAnalysis): GroupDefinition[] {
   const pipeline = byDomain("pipeline");
   const infrastructure = byDomain("infrastructure");
   const allCluster = byDomain("cluster").sort((left, right) => runtimeFlowRank(left) - runtimeFlowRank(right) || left.label.localeCompare(right.label));
-  const configurationIcons = new Set(["ConfigMap", "Secret", "Namespace", "HorizontalPodAutoscaler", "PersistentVolumeClaim"]);
-  const cluster = allCluster.filter((component) => !configurationIcons.has(component.icon));
-  const configuration = allCluster.filter((component) => configurationIcons.has(component.icon));
+  const cluster = allCluster;
   const hasObservedMonitoring = cluster.some((component) => /prometheus|grafana|monitoring|observability/i.test(`${component.label} ${component.icon}`));
   const pipelineLabel = pipeline.some((component) => component.icon === "GitHub Actions") ? "B · PIPELINE · GITHUB ACTIONS" : pipeline.some((component) => component.icon === "GitLab") ? "B · PIPELINE · GITLAB CI" : "B · DEVOPS · PIPELINE";
   const pipelineIcon = pipeline.some((component) => component.icon === "GitHub Actions") ? "GitHub Actions" : pipeline.some((component) => component.icon === "GitLab") ? "GitLab" : pipeline.some((component) => component.icon === "Jenkins") ? "Jenkins" : "GitHub";
@@ -171,8 +217,7 @@ function createGroups(analysis: RepositoryAnalysis): GroupDefinition[] {
     { id: "user-path", label: "A · USER JOURNEY · LIVE PATH", color: "#4f9938", children: user },
     { id: "cicd", label: pipelineLabel, color: "#7d9d36", children: pipeline, icon: pipelineIcon },
     { id: "infrastructure", label: "C · INFRASTRUCTURE · TERRAFORM & AUTOMATION", color: "#f08b2b", children: infrastructure },
-    { id: "cluster", label: hasObservedMonitoring ? "D · KUBERNETES · RUNTIME & OBSERVABILITY" : "D · KUBERNETES · RUNTIME & WORKLOADS", color: "#df77b7", children: cluster },
-    { id: "configuration", label: "E · KUBERNETES · CONFIGURATION & SECRETS", color: "#8e78c6", children: configuration },
+    { id: "cluster", label: hasObservedMonitoring ? "D · KUBERNETES CLUSTER · RUNTIME & OBSERVABILITY" : "D · KUBERNETES CLUSTER · TOPOLOGY", color: "#df77b7", children: cluster, icon: "Kubernetes" },
   ];
   return candidateGroups.filter((group) => group.children.length > 0);
 }
@@ -193,7 +238,7 @@ function normalizedJobName(value: string) {
   return value.replace(/^Job:\s*/i, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
 }
 
-function addGroupChildren(nodes: ArchitectureNode[], group: GroupDefinition, pipelinePlan: PipelinePlan, pipelineExpanded: boolean, executionStatuses: RepositoryAnalysis["pipelineExecutionStatuses"], pipelineClosing: boolean) {
+function addGroupChildren(nodes: ArchitectureNode[], group: GroupDefinition, pipelinePlan: PipelinePlan, pipelineExpanded: boolean, executionStatuses: RepositoryAnalysis["pipelineExecutionStatuses"], pipelineClosing: boolean, kubernetesPlan: KubernetesPlan) {
   if (group.id === "cicd") {
     if (!pipelineExpanded) return;
     const placements = new Map(pipelinePlan.stages.map((stage) => [stage.id, stage]));
@@ -204,6 +249,20 @@ function addGroupChildren(nodes: ArchitectureNode[], group: GroupDefinition, pip
       const phase = placement.independent ? "INDEPENDENT" : placement.isStart && placement.isEnd ? "START / END" : placement.isStart ? "START" : placement.isEnd ? "END" : `STAGE ${placement.column + 1}`;
       nodes.push({
         ...serviceNode(child.id, child.label, child.icon, { x: 38 + placement.column * (LEAF_WIDTH + 104), y: 98 + placement.row * (LEAF_HEIGHT + 38) }, "pipelineStep", child.evidence, child.tools, { phase, parallel: placement.parallel, independent: placement.independent, closing: pipelineClosing }, statusByJob.get(normalizedJobName(child.label))),
+        parentId: group.id,
+        extent: "parent",
+        zIndex: 3,
+      });
+    }
+    return;
+  }
+  if (group.id === "cluster") {
+    const placements = new Map(kubernetesPlan.placements.map((placement) => [placement.id, placement]));
+    for (const child of group.children) {
+      const placement = placements.get(child.id);
+      if (!placement) continue;
+      nodes.push({
+        ...serviceNode(child.id, child.label, child.icon, { x: 38 + placement.column * (LEAF_WIDTH + 68), y: 92 + placement.row * (LEAF_HEIGHT + 42) }, "devopsService", child.evidence, child.tools, undefined, undefined, { layer: placement.layer, namespace: placement.isNamespace, expanded: placement.isNamespace && kubernetesPlan.placements.some((candidate) => candidate.namespaceId === `namespace:${child.namespace ?? child.label.replace(/^Namespace(?: scope)?:\s*/i, "")}`) }),
         parentId: group.id,
         extent: "parent",
         zIndex: 3,
@@ -301,10 +360,11 @@ export function buildJourneyDefinitions(analysis: RepositoryAnalysis, nodes: Arc
   ];
 }
 
-export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView, pipelineExpanded = false, pipelineClosing = false): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
+export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView, pipelineExpanded = false, pipelineClosing = false, clusterExpanded = false, expandedNamespaceIds: string[] = []): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
   const groups = createGroups(analysis);
   const pipelinePlan = buildPipelinePlan(analysis);
-  const sizes = Object.fromEntries(groups.map((group) => [group.id, groupSize(group, view, pipelineExpanded, pipelinePlan)])) as Partial<Record<GroupId, Size>>;
+  const kubernetesPlan = buildKubernetesPlan(analysis, clusterExpanded, expandedNamespaceIds);
+  const sizes = Object.fromEntries(groups.map((group) => [group.id, groupSize(group, view, pipelineExpanded, pipelinePlan, clusterExpanded, kubernetesPlan)])) as Partial<Record<GroupId, Size>>;
   const devOpsGroups = groups.filter((group) => group.id !== "user-path");
   const devOpsItems = [{ id: "repository", width: LEAF_WIDTH + 20, height: LEAF_HEIGHT }, ...devOpsGroups.map((group) => ({ id: group.id, ...sizes[group.id]! }))];
   const positions = await calculateDevOpsLayout(devOpsItems);
@@ -320,13 +380,13 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
   const infrastructure = groupChildren("infrastructure");
   const cluster = groupChildren("cluster");
   const nodes: ArchitectureNode[] = [
-    ...(userGroup ? [groupNode(userGroup, userPosition, sizes["user-path"]!, view, pipelineExpanded, pipelinePlan)] : []),
+    ...(userGroup ? [groupNode(userGroup, userPosition, sizes["user-path"]!, view, pipelineExpanded, pipelinePlan, clusterExpanded, kubernetesPlan)] : []),
     serviceNode("repository", `${analysis.repository.owner}/${analysis.repository.repo}`, iconForProvider(analysis.repository.provider), { x: positions.repository.x, y: positions.repository.y + devOpsBaseY }, "devopsService"),
     ...(pipeline.length ? [serviceNode("devops-engineer", "DevOps Engineer", "Users", { x: positions.cicd.x, y: Math.max(42, positions.cicd.y + devOpsBaseY - LEAF_HEIGHT - 76) }, "devopsService", pipeline[0]?.evidence)] : []),
-    ...devOpsGroups.map((group) => groupNode(group, { x: positions[group.id].x, y: positions[group.id].y + devOpsBaseY }, sizes[group.id]!, view, pipelineExpanded, pipelinePlan)),
+    ...devOpsGroups.map((group) => groupNode(group, { x: positions[group.id].x, y: positions[group.id].y + devOpsBaseY }, sizes[group.id]!, view, pipelineExpanded, pipelinePlan, clusterExpanded, kubernetesPlan)),
   ];
 
-  if (view === "detailed") groups.forEach((group) => addGroupChildren(nodes, group, pipelinePlan, pipelineExpanded, analysis.pipelineExecutionStatuses, pipelineClosing));
+  if (view === "detailed") groups.forEach((group) => addGroupChildren(nodes, group, pipelinePlan, pipelineExpanded, analysis.pipelineExecutionStatuses, pipelineClosing, kubernetesPlan));
 
   const knownNodeIds = new Set(nodes.map((node) => node.id));
 
@@ -340,8 +400,15 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
     if (knownNodeIds.has(relation.source) && knownNodeIds.has(relation.target) && relation.evidence) edges.push(makeEdge(`extracted-${relation.id}`, relation.source, relation.target, relation.label, relation.kind, relation.evidence));
   }
 
+  if (clusterExpanded && knownNodeIds.has("cluster")) {
+    for (const namespace of cluster.filter((component) => component.icon === "Namespace" && knownNodeIds.has(component.id))) {
+      edges.push(makeEdge(`cluster-contains-${namespace.id}`, "cluster", namespace.id, "contains", "dependency", namespace.evidence));
+    }
+  }
+
   if (pipeline.length && knownNodeIds.has("devops-engineer")) {
-    edges.push(makeEdge("devops-engineer-pipeline", "devops-engineer", pipeline[0].id, "operates", "deployment", pipeline[0].evidence));
+    const pipelineTarget = pipelineExpanded && knownNodeIds.has(pipeline[0].id) ? pipeline[0].id : "cicd";
+    edges.push(makeEdge("devops-engineer-pipeline", "devops-engineer", pipelineTarget, "operates", "deployment", pipeline[0].evidence));
   }
 
   return { nodes, edges: Array.from(new Map(edges.map((edge) => [edge.id, edge])).values()) };

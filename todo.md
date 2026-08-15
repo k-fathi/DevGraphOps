@@ -169,3 +169,24 @@
 ## Pipeline Neutral Badge Test Follow-up
 
 - [x] Add a UI test that renders a GitHub Pipeline stage without reported execution data and asserts its visible Not reported badge.
+
+## Expandable Kubernetes Topology
+
+- [x] Render an explicit Kubernetes Cluster entry node with an expand/collapse control when evidenced Kubernetes resources exist.
+- [x] Reveal namespace-scoped topology in ordered layers: Namespace, Ingress, Service, Workloads, ConfigMaps, and Secrets only when declared.
+- [x] Preserve and clarify directional relationship arrows between declared Kubernetes resources without inventing parent resources.
+- [x] Connect DevOps Engineer to the evidenced delivery entry point with a visible directional arrow.
+- [x] Add interaction tests and verify the expandable Kubernetes topology and arrows against DEPI-GP.
+
+## Namespace Evidence Integrity Follow-up
+
+- [x] Stop rendering synthetic Namespace scope nodes when no Namespace manifest is declared.
+- [x] Keep metadata.namespace as grouping information only until an actual Namespace manifest is present.
+- [x] Add a regression test proving namespaced resources without a declared Namespace produce no synthetic parent or contains arrow.
+- [x] Re-verify DEPI-GP after the evidence-only Namespace correction.
+
+## Namespace Live Verification Follow-up
+
+- [x] Re-run DEPI-GP after the Namespace correction when manifest retrieval is complete.
+- [x] Expand the live Cluster and confirm no Namespace node or contains arrow appears without a declared Namespace manifest.
+- [x] Record post-fix Service-to-Deployment and configuration-to-workload evidence from the live topology.

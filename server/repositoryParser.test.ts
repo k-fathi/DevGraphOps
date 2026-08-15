@@ -233,6 +233,57 @@ jobs:
     ]));
   });
 
+  it("connects a GitHub Actions deployment job only to Kubernetes manifests named in its sourced script", () => {
+    const parsed = parseKubernetes([
+      { path: ".github/workflows/deploy.yml", content: `name: Deploy
+jobs:
+  deploy-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - run: kubectl apply -f k8s/deployments/api.yml
+` },
+      { path: "k8s/deployments/api.yml", content: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+` },
+      { path: "k8s/deployments/unrelated.yml", content: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unrelated
+` },
+    ]);
+
+    expect(parsed.relations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: "github-job-deploy-manifests", label: "updates manifest", evidence: ".github/workflows/deploy.yml" }),
+    ]));
+    expect(parsed.relations.some((relation) => relation.target.includes("unrelated"))).toBe(false);
+  });
+
+  it("keeps namespace metadata as grouping information without inventing a Namespace manifest or containment arrows", () => {
+    const parsed = parseKubernetes([{ path: "k8s/shop.yml", content: `apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: shop
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: shop
+spec:
+  template:
+    metadata:
+      labels:
+        app: web
+` }]);
+
+    expect(parsed.components.map((component) => component.label)).toEqual(expect.arrayContaining(["Service: web", "Deployment: web"]));
+    expect(parsed.components.some((component) => component.icon === "Namespace")).toBe(false);
+    expect(parsed.relations.some((relation) => relation.label === "contains")).toBe(false);
+  });
+
   it("extracts declared Kubernetes configuration and scaling resources with their relations", () => {
     const parsed = parseKubernetes([{ path: "k8s/runtime.yml", content: `apiVersion: v1
 kind: ConfigMap
@@ -297,7 +348,7 @@ spec:
       relations: [{ id: "user-ingress", source: "user", target: "ingress", label: "Open application", kind: "traffic" as const, evidence: "ingress.yml" }],
     };
 
-    const layout = await buildArchitectureLayout(analysis, "detailed");
+    const layout = await buildArchitectureLayout(analysis, "detailed", false, false, true);
     const groupIds = layout.nodes.filter((node) => node.type === "containerGroup").map((node) => node.id);
     expect(groupIds).toEqual(["user-path", "cluster"]);
     expect(groupIds).not.toContain("cicd");

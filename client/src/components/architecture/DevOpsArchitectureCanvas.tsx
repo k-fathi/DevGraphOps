@@ -35,6 +35,8 @@ export default function DevOpsArchitectureCanvas() {
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("overview");
   const [pipelineExpanded, setPipelineExpanded] = useState(false);
   const [pipelineClosing, setPipelineClosing] = useState(false);
+  const [clusterExpanded, setClusterExpanded] = useState(false);
+  const [expandedNamespaceIds, setExpandedNamespaceIds] = useState<string[]>([]);
   const [journeys, setJourneys] = useState<JourneyDefinition[]>([]);
   const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureNode>([]);
@@ -42,6 +44,14 @@ export default function DevOpsArchitectureCanvas() {
   const [flow, setFlow] = useState<ReactFlowInstance<ArchitectureNode, ArchitectureEdge> | null>(null);
   const { mutateAsync: analyzeRepository, isPending: loading } = trpc.repository.analyze.useMutation();
   const showPipelineDetails = pipelineExpanded || pipelineClosing;
+  const toggleCluster = useCallback(() => {
+    setView("detailed");
+    setClusterExpanded((expanded) => !expanded);
+  }, []);
+  const toggleNamespace = useCallback((namespace: string) => {
+    const token = `namespace:${namespace}`;
+    setExpandedNamespaceIds((current) => current.includes(token) ? current.filter((item) => item !== token) : [...current, token]);
+  }, []);
   const togglePipeline = useCallback(() => {
     if (!pipelineExpanded) {
       setPipelineClosing(false);
@@ -69,7 +79,7 @@ export default function DevOpsArchitectureCanvas() {
       return;
     }
     let active = true;
-    buildArchitectureLayout(analysis, view, showPipelineDetails, pipelineClosing).then((layout) => {
+    buildArchitectureLayout(analysis, view, showPipelineDetails, pipelineClosing, clusterExpanded, expandedNamespaceIds).then((layout) => {
       if (!active) return;
       const definitions = buildJourneyDefinitions(analysis, layout.nodes, layout.edges);
       const selectedJourney = definitions.find((journey) => journey.id === journeyMode);
@@ -81,12 +91,12 @@ export default function DevOpsArchitectureCanvas() {
         if (node.type === "containerGroup") return {
           ...node,
           className: selectedJourney && !selectedNodes.has(node.id) ? "journey-node--dimmed" : selectedJourney ? "journey-node--active" : undefined,
-          data: node.id === "cicd" ? { ...node.data, onTogglePipeline: togglePipeline } : node.data,
+          data: node.id === "cicd" ? { ...node.data, onTogglePipeline: togglePipeline } : node.id === "cluster" ? { ...node.data, onToggleCluster: toggleCluster } : node.data,
         };
         return {
           ...node,
           className: selectedJourney && !selectedNodes.has(node.id) ? "journey-node--dimmed" : selectedJourney ? "journey-node--active" : undefined,
-          data: { ...node.data, journeyNumber: nodeOrder.get(node.id), journeyActive: Boolean(selectedJourney && selectedNodes.has(node.id)), journeyDimmed: Boolean(selectedJourney && !selectedNodes.has(node.id)) },
+          data: { ...node.data, journeyNumber: nodeOrder.get(node.id), journeyActive: Boolean(selectedJourney && selectedNodes.has(node.id)), journeyDimmed: Boolean(selectedJourney && !selectedNodes.has(node.id)), kubernetesStage: node.data.kubernetesStage?.namespace ? { ...node.data.kubernetesStage, onToggleNamespace: () => { const component = analysis.components.find((item) => item.id === node.id); const namespace = component?.namespace ?? component?.label.replace(/^Namespace(?: scope)?:\s*/i, ""); if (namespace) toggleNamespace(namespace); } } : node.data.kubernetesStage },
         };
       }));
       setEdges(layout.edges.map((edge) => {
@@ -100,16 +110,16 @@ export default function DevOpsArchitectureCanvas() {
         };
       }));
       requestAnimationFrame(() => flow?.fitView({
-        nodes: showPipelineDetails ? layout.nodes.filter((node) => node.id === "cicd" || node.parentId === "cicd") : undefined,
-        padding: showPipelineDetails ? 0.1 : 0.13,
+        nodes: showPipelineDetails ? layout.nodes.filter((node) => node.id === "cicd" || node.parentId === "cicd") : clusterExpanded ? layout.nodes.filter((node) => node.id === "cluster" || node.parentId === "cluster") : undefined,
+        padding: showPipelineDetails || clusterExpanded ? 0.1 : 0.13,
         duration: 260,
-        maxZoom: showPipelineDetails ? 1.2 : 1.08,
+        maxZoom: showPipelineDetails || clusterExpanded ? 1.2 : 1.08,
       }));
     });
     return () => {
       active = false;
     };
-  }, [analysis, flow, journeyMode, pipelineClosing, setEdges, setNodes, showPipelineDetails, togglePipeline, view]);
+  }, [analysis, clusterExpanded, expandedNamespaceIds, flow, journeyMode, pipelineClosing, setEdges, setNodes, showPipelineDetails, toggleCluster, toggleNamespace, togglePipeline, view]);
 
   const detectedServices = useMemo(() => analysis ? Object.values(analysis.signals).filter(Boolean).length : 0, [analysis]);
   const providerLabel = analysis?.repository.provider === "github" ? "GitHub" : analysis?.repository.provider === "gitlab" ? "GitLab" : "Bitbucket";
@@ -148,13 +158,23 @@ export default function DevOpsArchitectureCanvas() {
       togglePipeline();
       return;
     }
+    if (node.id === "cluster") {
+      toggleCluster();
+      return;
+    }
+    if (node.type !== "containerGroup" && node.data.kubernetesStage?.namespace) {
+      const component = analysis?.components.find((item) => item.id === node.id);
+      const namespace = component?.namespace ?? component?.label.replace(/^Namespace(?: scope)?:\s*/i, "");
+      if (namespace) toggleNamespace(namespace);
+      return;
+    }
     if (node.type !== "containerGroup") {
       const selection = selectNodeEvidence(node.data.evidence, node.data.label);
       if (selection) setEvidenceSelection(selection);
     }
     if (node.id === "user") selectJourney("user");
     if (node.id === "repository") selectJourney("devops");
-  }, [openEvidence, selectJourney, togglePipeline]);
+  }, [analysis, openEvidence, selectJourney, toggleCluster, toggleNamespace, togglePipeline]);
 
   const runAnalysis = useCallback(async (targetUrl: string) => {
     setError("");
@@ -166,6 +186,8 @@ export default function DevOpsArchitectureCanvas() {
       setJourneyMode("overview");
       setPipelineExpanded(false);
       setPipelineClosing(false);
+      setClusterExpanded(false);
+      setExpandedNamespaceIds([]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "An unexpected error occurred while analyzing the repository.");
     }
@@ -260,6 +282,7 @@ export default function DevOpsArchitectureCanvas() {
           <button className={view === "detailed" ? "is-active" : ""} onClick={() => setView("detailed")} aria-pressed={view === "detailed"}>Detailed view</button>
         </div>
         {analysis.components.some((component) => component.domain === "pipeline") && <button className="pipeline-toolbar-toggle" onClick={togglePipeline} aria-expanded={pipelineExpanded}>{pipelineExpanded ? "Pipeline: collapse stages" : "Pipeline: expand stages"}</button>}
+        {analysis.components.some((component) => component.domain === "cluster") && <button className="pipeline-toolbar-toggle cluster-toolbar-toggle" onClick={toggleCluster} aria-expanded={clusterExpanded}>{clusterExpanded ? "Kubernetes: collapse topology" : "Kubernetes: expand topology"}</button>}
         <div className="workspace-toolbar__signal"><span className="signal-dot" />{detectedServices} signals · {analysis.relations.length} relationships</div>
         <div className="export-actions" aria-label="Diagram export">
           <span><Download size={13} /> Export</span>

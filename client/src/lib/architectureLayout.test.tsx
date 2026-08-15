@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ContainerGroupNode, DevopsServiceNode } from "@/components/architecture/nodes";
-import { buildPipelinePlan } from "./architectureLayout";
+import { buildKubernetesPlan, buildPipelinePlan } from "./architectureLayout";
 
 describe("expandable pipeline planning", () => {
   const components = [
@@ -86,5 +86,44 @@ describe("expandable pipeline planning", () => {
     } as any)));
 
     expect(screen.getByText("Not reported")).toBeTruthy();
+  });
+});
+
+describe("expandable Kubernetes topology", () => {
+  const components = [
+    { id: "namespace-shop", label: "Namespace: shop", icon: "Namespace", domain: "cluster", namespace: "shop" },
+    { id: "ingress-shop", label: "Ingress: web", icon: "Ingress", domain: "cluster", namespace: "shop" },
+    { id: "service-shop", label: "Service: web", icon: "Service", domain: "cluster", namespace: "shop" },
+    { id: "deployment-shop", label: "Deployment: web", icon: "Deployment", domain: "cluster", namespace: "shop" },
+    { id: "config-shop", label: "ConfigMap: web-config", icon: "ConfigMap", domain: "cluster", namespace: "shop" },
+    { id: "secret-shop", label: "Secret: web-secret", icon: "Secret", domain: "cluster", namespace: "shop" },
+  ] as any;
+
+  it("hides namespace contents until the declared namespace is expanded and then layers the resources", () => {
+    expect(buildKubernetesPlan({ components }, false).placements).toEqual([]);
+    const closedNamespace = buildKubernetesPlan({ components }, true);
+    expect(closedNamespace.placements.map((placement) => placement.id)).toEqual(["namespace-shop"]);
+
+    const expandedNamespace = buildKubernetesPlan({ components }, true, ["namespace:shop"]);
+    const byId = new Map(expandedNamespace.placements.map((placement) => [placement.id, placement]));
+    expect(byId.get("namespace-shop")).toMatchObject({ layer: "NAMESPACE", row: 0 });
+    expect(byId.get("ingress-shop")).toMatchObject({ layer: "INGRESS" });
+    expect(byId.get("service-shop")).toMatchObject({ layer: "SERVICE" });
+    expect(byId.get("deployment-shop")).toMatchObject({ layer: "WORKLOAD" });
+    expect(byId.get("config-shop")).toMatchObject({ layer: "CONFIG & SECRETS" });
+    expect(byId.get("secret-shop")).toMatchObject({ layer: "CONFIG & SECRETS" });
+  });
+
+  it("exposes a dedicated Cluster expand control", async () => {
+    const onToggleCluster = vi.fn();
+    const user = userEvent.setup();
+    render(React.createElement(ReactFlowProvider, null, React.createElement(ContainerGroupNode, {
+      id: "cluster",
+      type: "containerGroup",
+      data: { label: "D · KUBERNETES CLUSTER · TOPOLOGY", color: "#df77b7", collapsed: true, childCount: 6, isCluster: true, providerIcon: "Kubernetes", clusterExpanded: false, namespaceCount: 1, onToggleCluster },
+    } as any)));
+
+    await user.click(screen.getByRole("button", { name: "Expand topology" }));
+    expect(onToggleCluster).toHaveBeenCalledTimes(1);
   });
 });
