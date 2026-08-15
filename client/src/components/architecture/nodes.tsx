@@ -2,12 +2,13 @@
  * Visual direction: charcoal service cards on a technical board, surrounded by restrained dashed groups.
  * The palette relies on functional green, olive, amber, and pink accents rather than blue or neon effects.
  */
-import { CircleAlert, ExternalLink } from "lucide-react";
+import React from "react";
+import { ChevronDown, ChevronRight, CircleAlert, ExternalLink } from "lucide-react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { resolveIcon } from "@/lib/iconResolver";
 
-export type ContainerNodeData = { label: string; color: string; collapsed: boolean; childCount: number };
-export type ServiceNodeData = { label: string; icon: string; evidence?: string; tools?: string[]; journeyNumber?: number; journeyActive?: boolean; journeyDimmed?: boolean };
+export type ContainerNodeData = { label: string; color: string; collapsed: boolean; childCount: number; isPipeline?: boolean; providerIcon?: string; pipelineExpanded?: boolean; entryLabels?: string[]; terminalLabels?: string[]; parallelColumnCount?: number; independentCount?: number; onTogglePipeline?: () => void };
+export type ServiceNodeData = { label: string; icon: string; evidence?: string; tools?: string[]; journeyNumber?: number; journeyActive?: boolean; journeyDimmed?: boolean; pipelineStage?: { phase: string; parallel: boolean; independent?: boolean } };
 type ContainerNode = Node<ContainerNodeData, "containerGroup">;
 type ServiceNode = Node<ServiceNodeData, "devopsService" | "pipelineStep">;
 
@@ -24,13 +25,27 @@ function ToolIcon({ tool }: { tool: string }) {
 }
 
 export function ContainerGroupNode({ data }: NodeProps<ContainerNode>) {
-  return <div className={`architecture-group ${data.collapsed ? "architecture-group--collapsed" : ""}`} style={{ "--group-color": data.color } as React.CSSProperties}><Handle type="target" position={Position.Left} className="architecture-handle architecture-handle--group" /><div className="architecture-group__label">{data.label}</div>{data.collapsed && <div className="architecture-group__collapsed-count">{data.childCount || "–"}</div>}<Handle type="source" position={Position.Right} className="architecture-handle architecture-handle--group" /></div>;
+  const resolution = data.providerIcon ? resolveIcon(data.providerIcon) : null;
+  return <div className={`architecture-group ${data.collapsed ? "architecture-group--collapsed" : ""} ${data.isPipeline ? "architecture-group--pipeline" : ""} ${data.pipelineExpanded ? "architecture-group--pipeline-expanded" : ""}`} style={{ "--group-color": data.color } as React.CSSProperties}>
+    <Handle type="target" position={Position.Left} className="architecture-handle architecture-handle--group" />
+    <div className="architecture-group__label">{data.label}</div>
+    {data.isPipeline && <div className="pipeline-summary">
+      <div className="pipeline-summary__identity">{resolution?.kind === "image" && <img src={resolution.src} alt="" aria-hidden="true" />}<span>PIPELINE</span><strong>{data.childCount} sourced stages</strong></div>
+      {data.pipelineExpanded ? <><div className="pipeline-summary__guide"><span>START</span><b>{data.entryLabels?.join(" + ") || "Declared entry stage"}</b><i>→</i><span>END</span><b>{data.terminalLabels?.join(" + ") || "Declared terminal stage"}</b></div>{Boolean(data.independentCount) && <small className="pipeline-summary__independent">{data.independentCount} independent checks are separated below the declared path.</small>}</> : <p>Start at the marked entry stage, then expand to trace every declared hand-off.</p>}
+      <button type="button" className="pipeline-summary__toggle" aria-expanded={Boolean(data.pipelineExpanded)} onClick={(event) => { event.stopPropagation(); data.onTogglePipeline?.(); }}>
+        {data.pipelineExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{data.pipelineExpanded ? "Collapse stages" : "Expand stages"}
+      </button>
+    </div>}
+    {data.collapsed && !data.isPipeline && <div className="architecture-group__collapsed-count">{data.childCount || "–"}</div>}
+    <Handle type="source" position={Position.Right} className="architecture-handle architecture-handle--group" />
+  </div>;
 }
 
 export function DevopsServiceNode({ data }: NodeProps<ServiceNode>) {
-  return <div className={`architecture-node ${data.journeyActive ? "architecture-node--journey-active" : ""} ${data.journeyDimmed ? "architecture-node--journey-dimmed" : ""}`} title={data.evidence ? `${data.label} — evidence: ${data.evidence}` : data.label}>
+  return <div className={`architecture-node ${data.journeyActive ? "architecture-node--journey-active" : ""} ${data.journeyDimmed ? "architecture-node--journey-dimmed" : ""} ${data.pipelineStage ? "architecture-node--pipeline-stage" : ""}`} title={data.evidence ? `${data.label} — evidence: ${data.evidence}` : data.label}>
     <Handle type="target" position={Position.Left} className="architecture-handle" />
     {data.journeyNumber && <span className="architecture-node__sequence" aria-label={`Journey step ${data.journeyNumber}`}>{data.journeyNumber}</span>}
+    {data.pipelineStage && <div className="pipeline-stage-badge"><span>{data.pipelineStage.phase}</span>{data.pipelineStage.parallel && <em>PARALLEL</em>}</div>}
     <NodeIcon icon={data.icon} />
     <div className="architecture-node__label">{data.label}</div>
     {data.tools?.length ? <div className="architecture-node__tools" aria-label={`Tools used by ${data.label}`}>{data.tools.map((tool) => <span className="architecture-node__tool-link" key={tool}><ToolIcon tool={tool} /></span>)}</div> : null}

@@ -144,6 +144,24 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
 .architecture-group__label { position: absolute; left: 12px; top: -10px; padding: 0 5px; background: #101010; color: var(--group-color); font: 600 11px/1.15 "IBM Plex Mono", monospace; letter-spacing: 0.06em; white-space: nowrap; }
 .architecture-group--collapsed .architecture-group__label { top: 13px; left: 13px; background: transparent; color: #ededed; font-size: 10px; }
 .architecture-group__collapsed-count { position: absolute; right: 13px; bottom: 11px; color: var(--group-color); font: 500 18px/1 "IBM Plex Mono", monospace; opacity: 0.8; }
+.architecture-group--pipeline { border-color: #8fab45; background: linear-gradient(135deg, rgba(70, 83, 31, 0.2), rgba(24, 24, 24, 0.76) 52%); }
+.architecture-group--pipeline .architecture-group__label { color: #d8ed8c; }
+.pipeline-summary { position: absolute; inset: 42px 18px 18px; display: grid; align-content: center; gap: 10px; pointer-events: auto; }
+.pipeline-summary__identity { display: flex; align-items: center; gap: 8px; color: #dce6b2; font: 700 10px/1 "IBM Plex Mono", monospace; letter-spacing: 0.08em; }
+.pipeline-summary__identity img { width: 26px; height: 26px; object-fit: contain; }
+.pipeline-summary__identity strong { margin-left: auto; color: #aeb789; font-size: 9px; letter-spacing: 0; }
+.pipeline-summary p { margin: 0; color: #c2c2b4; font: 500 10px/1.4 "IBM Plex Mono", monospace; }
+.pipeline-summary__toggle, .pipeline-toolbar-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: max-content; border: 1px solid #8fab45; background: #222c15; color: #e5f4ad; padding: 7px 10px; font: 700 9px/1 "IBM Plex Mono", monospace; letter-spacing: 0.03em; cursor: pointer; transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 160ms ease; }
+.pipeline-summary__toggle:hover, .pipeline-toolbar-toggle:hover { background: #33431c; }
+.pipeline-summary__toggle:active, .pipeline-toolbar-toggle:active { transform: scale(0.97); }
+.architecture-group--pipeline-expanded .pipeline-summary { inset: 24px 20px auto; gap: 6px; }
+.architecture-group--pipeline-expanded .architecture-group__label { top: -10px; }
+.pipeline-summary__guide { display: flex; align-items: center; gap: 6px; min-width: 0; color: #dce6b2; font: 600 8px/1.2 "IBM Plex Mono", monospace; }
+.pipeline-summary__guide span { border: 1px solid #8fab45; padding: 3px 4px; color: #e5f4ad; font-weight: 700; }
+.pipeline-summary__guide b { min-width: 0; max-width: 270px; overflow: hidden; color: #d3d3c9; text-overflow: ellipsis; white-space: nowrap; }
+.pipeline-summary__guide i { color: #b8d661; font-size: 14px; font-style: normal; }
+.pipeline-summary__independent { color: #cfa5c3; font: 500 8px/1.2 "IBM Plex Mono", monospace; }
+.pipeline-toolbar-toggle { margin-left: 8px; }
 .architecture-node { width: 100%; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px 9px; border: 1px solid #5b5b5b; background: #1b1b1b; box-shadow: none; transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1), border-color 180ms cubic-bezier(0.23, 1, 0.32, 1); }
 .architecture-node:hover { transform: translateY(-2px); border-color: #a7a7a7; }
 .architecture-node--journey-active { border-color: #a2bf59; background: #232c18; box-shadow: 0 0 0 1px rgba(162, 191, 89, 0.22); }
@@ -154,6 +172,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
 .architecture-node__evidence { max-width: 108px; overflow: hidden; color: #b0b0b0; font: 500 8px/1 "IBM Plex Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
 .architecture-node__icon { width: 44px; height: 44px; object-fit: contain; filter: saturate(0.82) contrast(0.98); }
 .architecture-node__label { max-width: 112px; color: #ededed; font-size: 11px; line-height: 1.22; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
+.architecture-node--pipeline-stage { padding-top: 26px; }
+.pipeline-stage-badge { position: absolute; top: 7px; left: 7px; right: 7px; display: flex; justify-content: space-between; gap: 5px; color: #dce6a8; font: 700 8px/1 "IBM Plex Mono", monospace; letter-spacing: 0.04em; }
+.pipeline-stage-badge span { padding: 3px 4px; border: 1px solid #70882f; background: #202816; }
+.pipeline-stage-badge em { padding: 3px 4px; border: 1px solid #a16290; background: #2c1d28; color: #f0b4d6; font-style: normal; }
+.pipeline-stage-badge span:first-child { max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipeline-execution-map { margin-top: 8px; padding: 8px 9px; border: 1px solid #687b32; background: linear-gradient(90deg, rgba(50, 63, 23, 0.28), rgba(22, 22, 22, 0.9)); color: #d6d6cb; }
+.pipeline-execution-map header { display: flex; align-items: baseline; gap: 10px; color: #dce9ad; font: 700 9px/1.2 "IBM Plex Mono", monospace; letter-spacing: 0.04em; }
+.pipeline-execution-map header span { color: #adad9f; font-weight: 500; letter-spacing: 0; }
+.pipeline-execution-map__phases { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; margin-top: 7px; padding-bottom: 2px; }
+.pipeline-execution-map__phase { display: grid; gap: 3px; min-width: 150px; margin: 0; padding: 0; list-style: none; }
+.pipeline-execution-map__phase-label { display: flex; justify-content: space-between; color: #eff6cf; font: 700 8px/1 "IBM Plex Mono", monospace; }
+.pipeline-execution-map__phase-label em { color: #efb2d8; font-style: normal; }
+.pipeline-execution-map__phase li:not(.pipeline-execution-map__phase-label) { border-left: 2px solid #849d3e; background: #1a2012; padding: 4px 6px; color: #dfdfd7; font: 600 8px/1.25 "IBM Plex Mono", monospace; }
+.pipeline-execution-map__arrow { align-self: center; color: #b7d761; font-size: 18px; }
 .architecture-node__tools { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; max-width: 104px; min-height: 18px; }
 .architecture-node__tool-link { position: relative; display: inline-flex; padding-left: 5px; }
 .architecture-node__tool-link::before { content: "↗"; position: absolute; left: -1px; top: 4px; z-index: 1; color: #b7d45c; font: 700 8px/1 "IBM Plex Mono", monospace; }

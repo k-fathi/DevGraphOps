@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { architectureNodeTypes } from "@/components/architecture/nodes";
-import { buildArchitectureLayout, buildJourneyDefinitions, type ArchitectureEdge, type ArchitectureNode, type ArchitectureView, type JourneyDefinition, type JourneyMode } from "@/lib/architectureLayout";
+import { buildArchitectureLayout, buildJourneyDefinitions, buildPipelinePlan, type ArchitectureEdge, type ArchitectureNode, type ArchitectureView, type JourneyDefinition, type JourneyMode } from "@/lib/architectureLayout";
 import { trpc } from "@/lib/trpc";
 import type { RepositoryAnalysis } from "@/lib/repositoryParser";
 import { createEvidenceSelection, selectNodeEvidence, selectRelationshipEvidence, tokenizeEvidenceLine, type EvidenceSelection } from "@/lib/evidencePanel";
@@ -29,6 +29,7 @@ export default function DevOpsArchitectureCanvas() {
   const [exporting, setExporting] = useState<"png" | "svg" | null>(null);
   const [error, setError] = useState("");
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("overview");
+  const [pipelineExpanded, setPipelineExpanded] = useState(false);
   const [journeys, setJourneys] = useState<JourneyDefinition[]>([]);
   const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureNode>([]);
@@ -43,7 +44,7 @@ export default function DevOpsArchitectureCanvas() {
       return;
     }
     let active = true;
-    buildArchitectureLayout(analysis, view).then((layout) => {
+    buildArchitectureLayout(analysis, view, pipelineExpanded).then((layout) => {
       if (!active) return;
       const definitions = buildJourneyDefinitions(analysis, layout.nodes, layout.edges);
       const selectedJourney = definitions.find((journey) => journey.id === journeyMode);
@@ -52,7 +53,11 @@ export default function DevOpsArchitectureCanvas() {
       const nodeOrder = new Map((selectedJourney?.nodeIds ?? []).map((id, index) => [id, index + 1]));
       setJourneys(definitions);
       setNodes(layout.nodes.map((node) => {
-        if (node.type === "containerGroup") return { ...node, className: selectedJourney && !selectedNodes.has(node.id) ? "journey-node--dimmed" : selectedJourney ? "journey-node--active" : undefined };
+        if (node.type === "containerGroup") return {
+          ...node,
+          className: selectedJourney && !selectedNodes.has(node.id) ? "journey-node--dimmed" : selectedJourney ? "journey-node--active" : undefined,
+          data: node.id === "cicd" ? { ...node.data, onTogglePipeline: () => { setView("detailed"); setPipelineExpanded((expanded) => !expanded); } } : node.data,
+        };
         return {
           ...node,
           className: selectedJourney && !selectedNodes.has(node.id) ? "journey-node--dimmed" : selectedJourney ? "journey-node--active" : undefined,
@@ -69,16 +74,27 @@ export default function DevOpsArchitectureCanvas() {
           labelStyle: selectedJourney ? { ...edge.labelStyle, opacity: isActive ? 1 : 0 } : edge.labelStyle,
         };
       }));
-      requestAnimationFrame(() => flow?.fitView({ padding: 0.13, duration: 260, maxZoom: 1.08 }));
+      requestAnimationFrame(() => flow?.fitView({
+        nodes: pipelineExpanded ? layout.nodes.filter((node) => node.id === "cicd" || node.parentId === "cicd") : undefined,
+        padding: pipelineExpanded ? 0.1 : 0.13,
+        duration: 260,
+        maxZoom: pipelineExpanded ? 1.2 : 1.08,
+      }));
     });
     return () => {
       active = false;
     };
-  }, [analysis, flow, journeyMode, setEdges, setNodes, view]);
+  }, [analysis, flow, journeyMode, pipelineExpanded, setEdges, setNodes, view]);
 
   const detectedServices = useMemo(() => analysis ? Object.values(analysis.signals).filter(Boolean).length : 0, [analysis]);
   const providerLabel = analysis?.repository.provider === "github" ? "GitHub" : analysis?.repository.provider === "gitlab" ? "GitLab" : "Bitbucket";
   const activeJourney = useMemo(() => journeys.find((journey) => journey.id === journeyMode), [journeyMode, journeys]);
+  const pipelineFlow = useMemo(() => {
+    if (!analysis) return [];
+    const plan = buildPipelinePlan(analysis);
+    const byId = new Map(analysis.components.map((component) => [component.id, component]));
+    return Array.from({ length: plan.columns }, (_, column) => plan.stages.filter((stage) => !stage.independent && stage.column === column).sort((left, right) => left.row - right.row).map((stage) => ({ ...stage, label: byId.get(stage.id)?.label ?? stage.id })));
+  }, [analysis]);
   const relationshipEvidence = useMemo(() => {
     const labels = new Map(nodes.map((node) => [node.id, node.data.label]));
     return edges.flatMap((edge) => edge.data?.evidence ? [{ id: edge.id, source: labels.get(edge.source) ?? edge.source, target: labels.get(edge.target) ?? edge.target, label: String(edge.label ?? "relates to"), evidence: edge.data.evidence }] : []);
@@ -97,6 +113,11 @@ export default function DevOpsArchitectureCanvas() {
   }, []);
 
   const onJourneyNodeClick = useCallback((_event: React.MouseEvent, node: ArchitectureNode) => {
+    if (node.id === "cicd") {
+      setView("detailed");
+      setPipelineExpanded((expanded) => !expanded);
+      return;
+    }
     if (node.type !== "containerGroup") {
       const selection = selectNodeEvidence(node.data.evidence, node.data.label);
       if (selection) setEvidenceSelection(selection);
@@ -113,6 +134,7 @@ export default function DevOpsArchitectureCanvas() {
       const result = await analyzeRepository({ url: targetUrl });
       setAnalysis(result);
       setJourneyMode("overview");
+      setPipelineExpanded(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "An unexpected error occurred while analyzing the repository.");
     }
@@ -206,6 +228,7 @@ export default function DevOpsArchitectureCanvas() {
           <button className={view === "high" ? "is-active" : ""} onClick={() => setView("high")} aria-pressed={view === "high"}>High-level view</button>
           <button className={view === "detailed" ? "is-active" : ""} onClick={() => setView("detailed")} aria-pressed={view === "detailed"}>Detailed view</button>
         </div>
+        {analysis.components.some((component) => component.domain === "pipeline") && <button className="pipeline-toolbar-toggle" onClick={() => { setView("detailed"); setPipelineExpanded((expanded) => !expanded); }} aria-expanded={pipelineExpanded}>{pipelineExpanded ? "Pipeline: collapse stages" : "Pipeline: expand stages"}</button>}
         <div className="workspace-toolbar__signal"><span className="signal-dot" />{detectedServices} signals · {analysis.relations.length} relationships</div>
         <div className="export-actions" aria-label="Diagram export">
           <span><Download size={13} /> Export</span>
@@ -221,6 +244,10 @@ export default function DevOpsArchitectureCanvas() {
           <button className={journeyMode === "devops" ? "is-active" : ""} onClick={() => selectJourney("devops")}>Trace DevOps Journey</button>
         </div>
         <div className="journey-console__explanation">{activeJourney ? activeJourney.summary : "Select a journey to dim unrelated services and reveal its exact ordered route."}</div>
+        {pipelineExpanded && pipelineFlow.length > 0 && <section className="pipeline-execution-map" aria-label="Expanded pipeline execution map">
+          <header><strong>PIPELINE EXECUTION MAP</strong><span>Read left to right. Each column is an evidenced hand-off; stacked cards run in parallel.</span></header>
+          <div className="pipeline-execution-map__phases">{pipelineFlow.map((stages, index) => <React.Fragment key={`phase-${index}`}><ol className="pipeline-execution-map__phase"><li className="pipeline-execution-map__phase-label">{index === 0 ? "START" : `HAND-OFF ${index}`}{stages.length > 1 && <em>PARALLEL</em>}</li>{stages.map((stage) => <li key={stage.id}>{stage.label}</li>)}</ol>{index < pipelineFlow.length - 1 && <span className="pipeline-execution-map__arrow" aria-hidden="true">→</span>}</React.Fragment>)}</div>
+        </section>}
         {activeJourney && <ol className="journey-steps" aria-label={`${activeJourney.title} stages`}>
           {activeJourney.steps.map((step, index) => <li className={step.parallel ? "is-parallel" : ""} key={`${step.id}-${index}`} title={step.evidence ? `Evidence: ${step.evidence}` : step.label}>
             <span className="journey-steps__number">{index + 1}</span>

@@ -138,3 +138,11 @@
 - [x] Add a DevOpsArchitectureCanvas interaction test for clicking an evidenced node and opening its source panel.
 - [x] Add a DevOpsArchitectureCanvas interaction test for clicking a relationship evidence item and opening its source panel.
 - [x] Repeat a clean live node-then-relationship click sequence and record both open states.
+
+## Expandable Pipeline Experience
+
+- [x] Render a single explicit Pipeline entry node with provider icon, stage count, and expand/collapse control.
+- [x] Reveal evidenced CI/CD stages in an ordered execution view with a visible Start and End state.
+- [x] Label sourced hand-offs between stages and isolate parallel paths without crossing arrows.
+- [x] Preserve tool icons and source-file evidence within each expanded stage.
+- [x] Add interaction tests and verify the expandable Pipeline flow against DEPI-GP.

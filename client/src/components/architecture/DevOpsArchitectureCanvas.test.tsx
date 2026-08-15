@@ -28,6 +28,7 @@ vi.mock("@xyflow/react", () => ({
   useEdgesState: (initial: any[]) => { const [value, setValue] = useState(initial); return [value, setValue, vi.fn()]; },
 }));
 vi.mock("@/lib/architectureLayout", () => ({
+  buildPipelinePlan: vi.fn().mockReturnValue({ columns: 0, stages: [] }),
   buildArchitectureLayout: vi.fn().mockResolvedValue({
     nodes: [{ id: "service", type: "devopsService", data: { label: "Service: app", evidence: "k8s/service.yml", icon: "Service" }, position: { x: 0, y: 0 } }],
     edges: [{ id: "service-deployment", source: "service", target: "deployment", label: "Selects", data: { evidence: "k8s/service.yml", kind: "traffic" } }],
