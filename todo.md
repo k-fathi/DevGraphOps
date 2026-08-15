@@ -119,3 +119,22 @@
 
 - [x] Record which of ReplicaSet, ConfigMap, Pod, and Namespace are declared versus absent in DEPI-GP.
 - [x] Add a regression check proving DEPI-GP-style resource selection includes only evidenced Kubernetes manifests.
+
+## Evidence Snippet Side Panel
+
+- [x] Preserve source snippets for selected YAML and Terraform configuration files during repository analysis.
+- [x] Open an accessible side panel when a diagram node or relationship evidence is selected.
+- [x] Render highlighted YAML or Terraform evidence, source path, and empty/error states without inventing content.
+- [x] Add automated coverage and visually verify the side-panel selection flow.
+
+## Evidence Panel Verification Follow-up
+
+- [x] Add focused YAML and Terraform syntax highlighting inside the evidence snippet panel.
+- [x] Add interaction coverage for opening evidence from a selected node and a relationship evidence item.
+- [x] Verify the click-based node and relationship evidence flows in the live interface.
+
+## Canvas Evidence Interaction Verification
+
+- [x] Add a DevOpsArchitectureCanvas interaction test for clicking an evidenced node and opening its source panel.
+- [x] Add a DevOpsArchitectureCanvas interaction test for clicking a relationship evidence item and opening its source panel.
+- [x] Repeat a clean live node-then-relationship click sequence and record both open states.

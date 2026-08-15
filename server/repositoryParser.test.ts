@@ -1,7 +1,8 @@
 /** Unit coverage for the public-provider URL normalizer used by the repository-analysis service. */
 import { describe, expect, it } from "vitest";
 import { buildArchitectureLayout } from "../client/src/lib/architectureLayout";
-import { candidatePaths, parseKubernetes, parsePublicRepositoryUrl, parseTerraform } from "../client/src/lib/repositoryParser";
+import { buildEvidenceSnippets, candidatePaths, parseKubernetes, parsePublicRepositoryUrl, parseTerraform } from "../client/src/lib/repositoryParser";
+import { createEvidenceSelection, tokenizeEvidenceLine } from "../client/src/lib/evidencePanel";
 
 describe("parsePublicRepositoryUrl", () => {
   it("normalizes supported public provider URLs", () => {
@@ -22,6 +23,27 @@ describe("parsePublicRepositoryUrl", () => {
     expect(malformedYaml.relations).toEqual([]);
     expect(malformedTerraform.components).toEqual([]);
     expect(malformedTerraform.relations).toEqual([]);
+  });
+
+  it("keeps YAML and Terraform evidence snippets while redacting Kubernetes Secret contents", () => {
+    const snippets = buildEvidenceSnippets([
+      { path: "k8s/config.yaml", content: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\n" },
+      { path: "k8s/secret.yaml", content: "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app-secret\ndata:\n  token: private-value\n" },
+      { path: "infra/main.tf", content: 'resource "aws_s3_bucket" "assets" {}' },
+    ]);
+
+    expect(snippets.find((snippet) => snippet.path === "k8s/config.yaml")?.content).toContain("kind: ConfigMap");
+    expect(snippets.find((snippet) => snippet.path === "infra/main.tf")?.language).toBe("terraform");
+    expect(snippets.find((snippet) => snippet.path === "k8s/secret.yaml")).toMatchObject({ redacted: true });
+    expect(snippets.find((snippet) => snippet.path === "k8s/secret.yaml")?.content).not.toContain("private-value");
+  });
+
+  it("creates evidence selections for nodes and relationships and tokenizes YAML or Terraform source", () => {
+    expect(createEvidenceSelection("k8s/deployment.yaml", "Deployment: app")).toEqual({ path: "k8s/deployment.yaml", title: "Deployment: app" });
+    expect(createEvidenceSelection("infra/main.tf", "bucket → application", "depends_on")).toEqual({ path: "infra/main.tf", title: "bucket → application", relationship: "depends_on" });
+    expect(createEvidenceSelection(undefined, "No evidence")).toBeNull();
+    expect(tokenizeEvidenceLine("kind: Deployment # application", "yaml").map((token) => token.kind)).toEqual(expect.arrayContaining(["property", "comment"]));
+    expect(tokenizeEvidenceLine('resource "aws_s3_bucket" "assets" {', "terraform").map((token) => token.kind)).toEqual(expect.arrayContaining(["property", "string"]));
   });
 
   it("derives the public user entry from an Ingress manifest with direct file evidence", () => {

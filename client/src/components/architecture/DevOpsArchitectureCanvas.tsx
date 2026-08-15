@@ -2,8 +2,8 @@
  * Visual direction: off-black diagram workspace with charcoal controls, dashed green routing,
  * and limited olive, amber, and pink functional signals in place of blue or neon accents.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, Download, FileImage, FileType2, GitBranch, LoaderCircle, ScanSearch } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertCircle, Download, FileCode2, FileImage, FileType2, GitBranch, LoaderCircle, ScanSearch } from "lucide-react";
 import { toPng, toSvg } from "html-to-image";
 import {
   Background,
@@ -19,6 +19,8 @@ import { architectureNodeTypes } from "@/components/architecture/nodes";
 import { buildArchitectureLayout, buildJourneyDefinitions, type ArchitectureEdge, type ArchitectureNode, type ArchitectureView, type JourneyDefinition, type JourneyMode } from "@/lib/architectureLayout";
 import { trpc } from "@/lib/trpc";
 import type { RepositoryAnalysis } from "@/lib/repositoryParser";
+import { createEvidenceSelection, selectNodeEvidence, selectRelationshipEvidence, tokenizeEvidenceLine, type EvidenceSelection } from "@/lib/evidencePanel";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 export default function DevOpsArchitectureCanvas() {
   const [repositoryUrl, setRepositoryUrl] = useState("");
@@ -28,6 +30,7 @@ export default function DevOpsArchitectureCanvas() {
   const [error, setError] = useState("");
   const [journeyMode, setJourneyMode] = useState<JourneyMode>("overview");
   const [journeys, setJourneys] = useState<JourneyDefinition[]>([]);
+  const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<ArchitectureEdge>([]);
   const [flow, setFlow] = useState<ReactFlowInstance<ArchitectureNode, ArchitectureEdge> | null>(null);
@@ -80,6 +83,13 @@ export default function DevOpsArchitectureCanvas() {
     const labels = new Map(nodes.map((node) => [node.id, node.data.label]));
     return edges.flatMap((edge) => edge.data?.evidence ? [{ id: edge.id, source: labels.get(edge.source) ?? edge.source, target: labels.get(edge.target) ?? edge.target, label: String(edge.label ?? "relates to"), evidence: edge.data.evidence }] : []);
   }, [edges, nodes]);
+  const evidenceByPath = useMemo(() => new Map((analysis?.evidenceSnippets ?? []).map((snippet) => [snippet.path, snippet])), [analysis]);
+  const selectedSnippet = evidenceSelection ? evidenceByPath.get(evidenceSelection.path) : undefined;
+
+  const openEvidence = useCallback((path: string | undefined, title: string, relationship?: string) => {
+    const selection = createEvidenceSelection(path, title, relationship);
+    if (selection) setEvidenceSelection(selection);
+  }, []);
 
   const selectJourney = useCallback((nextJourney: JourneyMode) => {
     setJourneyMode(nextJourney);
@@ -87,13 +97,18 @@ export default function DevOpsArchitectureCanvas() {
   }, []);
 
   const onJourneyNodeClick = useCallback((_event: React.MouseEvent, node: ArchitectureNode) => {
+    if (node.type !== "containerGroup") {
+      const selection = selectNodeEvidence(node.data.evidence, node.data.label);
+      if (selection) setEvidenceSelection(selection);
+    }
     if (node.id === "user") selectJourney("user");
     if (node.id === "repository") selectJourney("devops");
-  }, [selectJourney]);
+  }, [openEvidence, selectJourney]);
 
   const runAnalysis = useCallback(async (targetUrl: string) => {
     setError("");
     setAnalysis(null);
+    setEvidenceSelection(null);
     try {
       const result = await analyzeRepository({ url: targetUrl });
       setAnalysis(result);
@@ -118,6 +133,13 @@ export default function DevOpsArchitectureCanvas() {
     setRepositoryUrl(repositoryFromUrl);
     void runAnalysis(repositoryFromUrl);
   }, [runAnalysis]);
+
+  useEffect(() => {
+    const evidencePath = new URLSearchParams(window.location.search).get("evidence");
+    if (!analysis || !evidencePath || !analysis.evidenceSnippets.some((snippet) => snippet.path === evidencePath)) return;
+    const component = analysis.components.find((item) => item.evidence === evidencePath);
+    setEvidenceSelection(createEvidenceSelection(evidencePath, component?.label ?? "Shared source evidence"));
+  }, [analysis]);
 
   const onExport = useCallback(async (format: "png" | "svg") => {
     if (!analysis) {
@@ -209,7 +231,7 @@ export default function DevOpsArchitectureCanvas() {
         </ol>}
         {relationshipEvidence.length > 0 && <details className="relationship-evidence">
           <summary>Relationship evidence ({relationshipEvidence.length})</summary>
-          <ul>{relationshipEvidence.map((relationship) => <li key={relationship.id}><span>{relationship.source} <b>{relationship.label}</b> {relationship.target}</span><small>{relationship.evidence}</small></li>)}</ul>
+          <ul>{relationshipEvidence.map((relationship) => <li key={relationship.id}><button type="button" className="relationship-evidence__item" onClick={() => { const selection = selectRelationshipEvidence(relationship.evidence, relationship.source, relationship.target, relationship.label); if (selection) setEvidenceSelection(selection); }}><span>{relationship.source} <b>{relationship.label}</b> {relationship.target}</span><small>{relationship.evidence}</small><FileCode2 size={12} aria-hidden="true" /></button></li>)}</ul>
         </details>}
       </section>
 
@@ -222,6 +244,7 @@ export default function DevOpsArchitectureCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={onJourneyNodeClick}
+          onEdgeClick={(_event, edge) => { const selection = selectRelationshipEvidence(edge.data?.evidence, edge.source, edge.target, String(edge.label ?? "Relationship evidence")); if (selection) setEvidenceSelection(selection); }}
           onInit={setFlow}
           fitView
           minZoom={0.2}
@@ -242,6 +265,25 @@ export default function DevOpsArchitectureCanvas() {
         </div>
         <div className="canvas-note">{analysis.detectedFiles.length ? `Analyzed files: ${analysis.detectedFiles.slice(0, 3).join(" · ")}` : "No infrastructure file signals were detected."}</div>
       </section>
+      <Sheet open={Boolean(evidenceSelection)} onOpenChange={(open) => !open && setEvidenceSelection(null)}>
+        <SheetContent side="right" className="evidence-panel">
+          <SheetHeader className="evidence-panel__header">
+            <SheetTitle>Source evidence</SheetTitle>
+            <SheetDescription>{evidenceSelection?.relationship ? `${evidenceSelection.relationship} relationship` : "Selected diagram node"}</SheetDescription>
+          </SheetHeader>
+          <div className="evidence-panel__body">
+            <div className="evidence-panel__meta">
+              <span>{selectedSnippet?.language ?? "source"}</span>
+              <code>{evidenceSelection?.path}</code>
+            </div>
+            <h3>{evidenceSelection?.title}</h3>
+            {selectedSnippet ? <>
+              {selectedSnippet.redacted && <p className="evidence-panel__notice">Sensitive Kubernetes Secret values are not displayed.</p>}
+              <pre aria-label="Source code evidence"><code>{selectedSnippet.content.split("\n").map((line, index) => <span className="evidence-panel__line" key={`${index}-${line.slice(0, 12)}`}><i aria-hidden="true">{index + 1}</i><span>{tokenizeEvidenceLine(line, selectedSnippet.language).map((token, tokenIndex) => <span className={token.kind ? `evidence-token evidence-token--${token.kind}` : undefined} key={`${tokenIndex}-${token.text}`}>{token.text}</span>)}</span></span>)}</code></pre>
+            </> : <p className="evidence-panel__missing">This evidence path was not retained for safe display. Analyze the repository again to refresh the selected source files.</p>}
+          </div>
+        </SheetContent>
+      </Sheet>
       </> : <section className="architecture-empty" aria-live="polite">
         {loading ? <LoaderCircle className="spin" size={26} aria-hidden="true" /> : <ScanSearch size={26} aria-hidden="true" />}
         <h2>{loading ? "Inspecting repository evidence" : "Analyze a real public repository"}</h2>

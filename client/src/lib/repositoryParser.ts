@@ -59,6 +59,13 @@ export type ArchitectureRelation = {
   evidence?: string;
 };
 
+export type EvidenceSnippet = {
+  path: string;
+  content: string;
+  language: "yaml" | "terraform" | "docker" | "text";
+  redacted?: boolean;
+};
+
 export type RepositoryAnalysis = {
   repository: RepositoryIdentity;
   signals: RepositorySignals;
@@ -66,6 +73,7 @@ export type RepositoryAnalysis = {
   detectedFiles: string[];
   components: ExtractedComponent[];
   relations: ArchitectureRelation[];
+  evidenceSnippets: EvidenceSnippet[];
   isPreview?: boolean;
 };
 
@@ -79,6 +87,7 @@ type KubernetesResource = { id: string; kind: string; name: string; source: stri
 const MAX_TREE_ENTRIES = 800;
 const MAX_CONFIG_FILES = 14;
 const MAX_FILE_BYTES = 160_000;
+const MAX_EVIDENCE_SNIPPET_CHARS = 12_000;
 const providerHeaders = { "User-Agent": "Repogram/1.0 (public repository analysis)" };
 
 const emptySignals = (): RepositorySignals => ({
@@ -197,6 +206,19 @@ function uniqueById<T extends { id: string }>(items: T[]) {
 
 function uniqueRelations(items: ArchitectureRelation[]) {
   return Array.from(new Map(items.map((item) => [`${item.source}-${item.target}-${item.label}`, item])).values());
+}
+
+export function buildEvidenceSnippets(files: Array<{ path: string; content: string }>): EvidenceSnippet[] {
+  return files.map((file) => {
+    const lowerPath = file.path.toLowerCase();
+    const language: EvidenceSnippet["language"] = lowerPath.endsWith(".tf") ? "terraform" : lowerPath.endsWith("dockerfile") ? "docker" : /\.ya?ml$/.test(lowerPath) ? "yaml" : "text";
+    const isSecretManifest = language === "yaml" && /^\s*kind:\s*secret\s*$/im.test(file.content);
+    const content = isSecretManifest
+      ? "# Sensitive Kubernetes Secret content is intentionally redacted.\n# This resource and its source path were used as evidence in the diagram."
+      : file.content.slice(0, MAX_EVIDENCE_SNIPPET_CHARS);
+    const truncated = !isSecretManifest && file.content.length > MAX_EVIDENCE_SNIPPET_CHARS;
+    return { path: file.path, content: truncated ? `${content}\n\n# … snippet truncated for display` : content, language, redacted: isSecretManifest || undefined };
+  });
 }
 
 function parseUrl(rawUrl: string) {
@@ -677,5 +699,6 @@ export async function analyzePublicRepository(rawUrl: string): Promise<Repositor
     detectedFiles: Array.from(new Set([...detectedFiles, ...contents.map((file) => file.path)])).slice(0, 10),
     components,
     relations,
+    evidenceSnippets: buildEvidenceSnippets(contents),
   };
 }
