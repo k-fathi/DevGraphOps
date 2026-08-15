@@ -190,3 +190,17 @@
 - [x] Re-run DEPI-GP after the Namespace correction when manifest retrieval is complete.
 - [x] Expand the live Cluster and confirm no Namespace node or contains arrow appears without a declared Namespace manifest.
 - [x] Record post-fix Service-to-Deployment and configuration-to-workload evidence from the live topology.
+
+## Workload Hierarchy and Cluster Focus
+
+- [x] Keep resources in an undeclared namespace visible as directly declared resources when other explicit Namespace manifests are present.
+- [x] Prioritize compact all-resources Kubernetes manifest names so declared ReplicaSet and Pod ownership remains eligible within the bounded public-repository analysis budget.
+- [x] Detect declared ReplicaSet and Pod ownership or selector links to Workloads without inventing descendants.
+- [x] Add independent Workload expansion that reveals only evidenced Pods and ReplicaSets beneath the selected Workload.
+- [x] Add a Service-to-Deployment Focus Mode that highlights only the declared direct connection and dims all unrelated resources.
+- [x] Add an accessible Cluster legend explaining traffic, delivery, dependency, focus, and hierarchy arrows with the established colors.
+- [x] Add automated interaction coverage and verify the hierarchy, focus, and legend against a public repository.
+
+## GitHub Delivery
+
+- [ ] Push the completed Repogram project to `k-fathi/DevGraphOps` after the implementation, tests, and checkpoint are complete.

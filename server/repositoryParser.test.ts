@@ -1,7 +1,7 @@
 /** Unit coverage for the public-provider URL normalizer used by the repository-analysis service. */
 import { describe, expect, it } from "vitest";
 import { buildArchitectureLayout } from "../client/src/lib/architectureLayout";
-import { buildEvidenceSnippets, candidatePaths, normalizeExecutionState, parseKubernetes, parsePublicRepositoryUrl, parseTerraform } from "../client/src/lib/repositoryParser";
+import { buildEvidenceSnippets, candidatePaths, normalizeExecutionState, parseKubernetes, parsePublicRepositoryUrl, parseTerraform, prioritizeKubernetesComponents } from "../client/src/lib/repositoryParser";
 import { createEvidenceSelection, tokenizeEvidenceLine } from "../client/src/lib/evidencePanel";
 
 describe("parsePublicRepositoryUrl", () => {
@@ -88,6 +88,67 @@ describe("parsePublicRepositoryUrl", () => {
       "release-cluster/frontend-deployment.yaml",
       "release/kubernetes-manifests.yaml",
     ]));
+  });
+
+  it("retains compact all-resources manifests so declared workload descendants remain analyzable", () => {
+    const selected = candidatePaths([
+      "docs/values.yaml",
+      "examples/miscellaneous/nginx-deployed-all.yaml",
+      "examples/other.yaml",
+      "src/application.yaml",
+    ]);
+
+    expect(selected).toContain("examples/miscellaneous/nginx-deployed-all.yaml");
+    expect(selected.indexOf("examples/miscellaneous/nginx-deployed-all.yaml")).toBeLessThan(selected.indexOf("examples/other.yaml"));
+  });
+
+  it("prioritizes evidenced ownership endpoints before the bounded Kubernetes render set", () => {
+    const components = [
+      ...Array.from({ length: 24 }, (_, index) => ({ id: `other-${index}`, label: `ConfigMap: ${index}`, icon: "ConfigMap", domain: "cluster" as const })),
+      { id: "deployment", label: "Deployment: web", icon: "Deployment", domain: "cluster" as const },
+      { id: "replicaset", label: "ReplicaSet: web-6d9", icon: "ReplicaSet", domain: "cluster" as const },
+      { id: "pod", label: "Pod: web-6d9-x2p", icon: "Pod", domain: "cluster" as const },
+    ];
+    const prioritized = prioritizeKubernetesComponents(components, [
+      { id: "deployment-owns-replicaset", source: "deployment", target: "replicaset", label: "owns", kind: "dependency" },
+      { id: "replicaset-owns-pod", source: "replicaset", target: "pod", label: "owns", kind: "dependency" },
+    ]);
+
+    expect(prioritized.slice(0, 3).map((component) => component.id)).toEqual(["deployment", "replicaset", "pod"]);
+  });
+
+  it("extracts and prioritizes an ownership chain from a Kubernetes List manifest", () => {
+    const parsed = parseKubernetes([{ path: "nginx-deployed-all.yaml", content: `apiVersion: v1
+kind: List
+items:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx
+      namespace: default
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    metadata:
+      name: nginx-6d9
+      namespace: default
+      ownerReferences:
+        - apiVersion: apps/v1
+          kind: Deployment
+          name: nginx
+  - apiVersion: v1
+    kind: Pod
+    metadata:
+      name: nginx-6d9-x2p
+      namespace: default
+      ownerReferences:
+        - apiVersion: apps/v1
+          kind: ReplicaSet
+          name: nginx-6d9
+` }]);
+    const prioritized = prioritizeKubernetesComponents(parsed.components, parsed.relations);
+
+    expect(parsed.relations.filter((relation) => relation.label === "owns")).toHaveLength(2);
+    expect(prioritized.slice(0, 3).map((component) => component.label)).toEqual(["Deployment: nginx", "ReplicaSet: nginx-6d9", "Pod: nginx-6d9-x2p"]);
   });
 
   it("keeps a complete declared user route when selected Kubernetes files are parsed together", () => {
@@ -282,6 +343,38 @@ spec:
     expect(parsed.components.map((component) => component.label)).toEqual(expect.arrayContaining(["Service: web", "Deployment: web"]));
     expect(parsed.components.some((component) => component.icon === "Namespace")).toBe(false);
     expect(parsed.relations.some((relation) => relation.label === "contains")).toBe(false);
+  });
+
+  it("creates workload ownership links only when Pod and ReplicaSet ownerReferences are declared", () => {
+    const parsed = parseKubernetes([{ path: "k8s/workload-tree.yml", content: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: web-6d9
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: web
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-6d9-x2p
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: ReplicaSet
+      name: web-6d9
+` }]);
+    const byLabel = new Map(parsed.components.map((component) => [component.label, component.id]));
+
+    expect(parsed.relations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: byLabel.get("Deployment: web"), target: byLabel.get("ReplicaSet: web-6d9"), label: "owns", evidence: "k8s/workload-tree.yml" }),
+      expect.objectContaining({ source: byLabel.get("ReplicaSet: web-6d9"), target: byLabel.get("Pod: web-6d9-x2p"), label: "owns", evidence: "k8s/workload-tree.yml" }),
+    ]));
   });
 
   it("extracts declared Kubernetes configuration and scaling resources with their relations", () => {

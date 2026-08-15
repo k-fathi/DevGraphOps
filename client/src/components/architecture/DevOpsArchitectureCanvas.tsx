@@ -37,6 +37,8 @@ export default function DevOpsArchitectureCanvas() {
   const [pipelineClosing, setPipelineClosing] = useState(false);
   const [clusterExpanded, setClusterExpanded] = useState(false);
   const [expandedNamespaceIds, setExpandedNamespaceIds] = useState<string[]>([]);
+  const [expandedWorkloadIds, setExpandedWorkloadIds] = useState<string[]>([]);
+  const [serviceDeploymentFocus, setServiceDeploymentFocus] = useState(false);
   const [journeys, setJourneys] = useState<JourneyDefinition[]>([]);
   const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureNode>([]);
@@ -51,6 +53,9 @@ export default function DevOpsArchitectureCanvas() {
   const toggleNamespace = useCallback((namespace: string) => {
     const token = `namespace:${namespace}`;
     setExpandedNamespaceIds((current) => current.includes(token) ? current.filter((item) => item !== token) : [...current, token]);
+  }, []);
+  const toggleWorkload = useCallback((workloadId: string) => {
+    setExpandedWorkloadIds((current) => current.includes(workloadId) ? current.filter((item) => item !== workloadId) : [...current, workloadId]);
   }, []);
   const togglePipeline = useCallback(() => {
     if (!pipelineExpanded) {
@@ -79,12 +84,15 @@ export default function DevOpsArchitectureCanvas() {
       return;
     }
     let active = true;
-    buildArchitectureLayout(analysis, view, showPipelineDetails, pipelineClosing, clusterExpanded, expandedNamespaceIds).then((layout) => {
+    buildArchitectureLayout(analysis, view, showPipelineDetails, pipelineClosing, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds).then((layout) => {
       if (!active) return;
       const definitions = buildJourneyDefinitions(analysis, layout.nodes, layout.edges);
       const selectedJourney = definitions.find((journey) => journey.id === journeyMode);
       const selectedNodes = new Set(selectedJourney?.nodeIds ?? []);
       const selectedEdges = new Set(selectedJourney?.edgeIds ?? []);
+      const focusRelation = analysis.relations.find((relation) => relation.label === "Selects" && analysis.components.some((component) => component.id === relation.source && component.icon === "Service") && analysis.components.some((component) => component.id === relation.target && component.icon === "Deployment"));
+      const focusedNodes = new Set(serviceDeploymentFocus && focusRelation ? [focusRelation.source, focusRelation.target] : []);
+      const focusedEdge = focusRelation ? `extracted-${focusRelation.id}` : undefined;
       const nodeOrder = new Map((selectedJourney?.nodeIds ?? []).map((id, index) => [id, index + 1]));
       setJourneys(definitions);
       setNodes(layout.nodes.map((node) => {
@@ -95,18 +103,19 @@ export default function DevOpsArchitectureCanvas() {
         };
         return {
           ...node,
-          className: selectedJourney && !selectedNodes.has(node.id) ? "journey-node--dimmed" : selectedJourney ? "journey-node--active" : undefined,
-          data: { ...node.data, journeyNumber: nodeOrder.get(node.id), journeyActive: Boolean(selectedJourney && selectedNodes.has(node.id)), journeyDimmed: Boolean(selectedJourney && !selectedNodes.has(node.id)), kubernetesStage: node.data.kubernetesStage?.namespace ? { ...node.data.kubernetesStage, onToggleNamespace: () => { const component = analysis.components.find((item) => item.id === node.id); const namespace = component?.namespace ?? component?.label.replace(/^Namespace(?: scope)?:\s*/i, ""); if (namespace) toggleNamespace(namespace); } } : node.data.kubernetesStage },
+          className: serviceDeploymentFocus ? (focusedNodes.has(node.id) ? "cluster-focus-node--active" : "cluster-focus-node--dimmed") : selectedJourney && !selectedNodes.has(node.id) ? "journey-node--dimmed" : selectedJourney ? "journey-node--active" : undefined,
+          data: { ...node.data, journeyNumber: nodeOrder.get(node.id), journeyActive: Boolean(selectedJourney && selectedNodes.has(node.id)), journeyDimmed: Boolean(selectedJourney && !selectedNodes.has(node.id)), kubernetesStage: node.data.kubernetesStage?.namespace ? { ...node.data.kubernetesStage, onToggleNamespace: () => { const component = analysis.components.find((item) => item.id === node.id); const namespace = component?.namespace ?? component?.label.replace(/^Namespace(?: scope)?:\s*/i, ""); if (namespace) toggleNamespace(namespace); } } : node.data.kubernetesStage?.childCount ? { ...node.data.kubernetesStage, onToggleWorkload: () => toggleWorkload(node.id) } : node.data.kubernetesStage },
         };
       }));
       setEdges(layout.edges.map((edge) => {
-        const isActive = selectedEdges.has(edge.id);
+        const isActive = serviceDeploymentFocus ? edge.id === focusedEdge : selectedEdges.has(edge.id);
+        const isHighlighted = Boolean(serviceDeploymentFocus || selectedJourney);
         return {
           ...edge,
-          animated: Boolean(selectedJourney && isActive),
-          className: selectedJourney ? (isActive ? "journey-edge--active" : "journey-edge--dimmed") : undefined,
-          style: selectedJourney ? { ...edge.style, opacity: isActive ? 1 : 0.12, strokeWidth: isActive ? 4 : 1 } : edge.style,
-          labelStyle: selectedJourney ? { ...edge.labelStyle, opacity: isActive ? 1 : 0 } : edge.labelStyle,
+          animated: Boolean(isHighlighted && isActive),
+          className: isHighlighted ? (isActive ? "journey-edge--active" : "journey-edge--dimmed") : undefined,
+          style: isHighlighted ? { ...edge.style, opacity: isActive ? 1 : 0.08, strokeWidth: isActive ? 4 : 1 } : edge.style,
+          labelStyle: isHighlighted ? { ...edge.labelStyle, opacity: isActive ? 1 : 0 } : edge.labelStyle,
         };
       }));
       requestAnimationFrame(() => flow?.fitView({
@@ -119,7 +128,7 @@ export default function DevOpsArchitectureCanvas() {
     return () => {
       active = false;
     };
-  }, [analysis, clusterExpanded, expandedNamespaceIds, flow, journeyMode, pipelineClosing, setEdges, setNodes, showPipelineDetails, toggleCluster, toggleNamespace, togglePipeline, view]);
+  }, [analysis, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds, flow, journeyMode, pipelineClosing, serviceDeploymentFocus, setEdges, setNodes, showPipelineDetails, toggleCluster, toggleNamespace, togglePipeline, toggleWorkload, view]);
 
   const detectedServices = useMemo(() => analysis ? Object.values(analysis.signals).filter(Boolean).length : 0, [analysis]);
   const providerLabel = analysis?.repository.provider === "github" ? "GitHub" : analysis?.repository.provider === "gitlab" ? "GitLab" : "Bitbucket";
@@ -168,13 +177,17 @@ export default function DevOpsArchitectureCanvas() {
       if (namespace) toggleNamespace(namespace);
       return;
     }
+    if (node.type !== "containerGroup" && node.data.kubernetesStage?.childCount) {
+      toggleWorkload(node.id);
+      return;
+    }
     if (node.type !== "containerGroup") {
       const selection = selectNodeEvidence(node.data.evidence, node.data.label);
       if (selection) setEvidenceSelection(selection);
     }
     if (node.id === "user") selectJourney("user");
     if (node.id === "repository") selectJourney("devops");
-  }, [analysis, openEvidence, selectJourney, toggleCluster, toggleNamespace, togglePipeline]);
+  }, [analysis, openEvidence, selectJourney, toggleCluster, toggleNamespace, togglePipeline, toggleWorkload]);
 
   const runAnalysis = useCallback(async (targetUrl: string) => {
     setError("");
@@ -188,6 +201,8 @@ export default function DevOpsArchitectureCanvas() {
       setPipelineClosing(false);
       setClusterExpanded(false);
       setExpandedNamespaceIds([]);
+      setExpandedWorkloadIds([]);
+      setServiceDeploymentFocus(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "An unexpected error occurred while analyzing the repository.");
     }
@@ -283,6 +298,7 @@ export default function DevOpsArchitectureCanvas() {
         </div>
         {analysis.components.some((component) => component.domain === "pipeline") && <button className="pipeline-toolbar-toggle" onClick={togglePipeline} aria-expanded={pipelineExpanded}>{pipelineExpanded ? "Pipeline: collapse stages" : "Pipeline: expand stages"}</button>}
         {analysis.components.some((component) => component.domain === "cluster") && <button className="pipeline-toolbar-toggle cluster-toolbar-toggle" onClick={toggleCluster} aria-expanded={clusterExpanded}>{clusterExpanded ? "Kubernetes: collapse topology" : "Kubernetes: expand topology"}</button>}
+        {analysis.relations.some((relation) => relation.label === "Selects" && analysis.components.some((component) => component.id === relation.source && component.icon === "Service") && analysis.components.some((component) => component.id === relation.target && component.icon === "Deployment")) && <button className={`pipeline-toolbar-toggle cluster-focus-toggle ${serviceDeploymentFocus ? "is-active" : ""}`} onClick={() => { setView("detailed"); setClusterExpanded(true); setServiceDeploymentFocus((focused) => !focused); }} aria-pressed={serviceDeploymentFocus}>{serviceDeploymentFocus ? "Cluster focus: exit" : "Cluster focus: Service → Deployment"}</button>}
         <div className="workspace-toolbar__signal"><span className="signal-dot" />{detectedServices} signals · {analysis.relations.length} relationships</div>
         <div className="export-actions" aria-label="Diagram export">
           <span><Download size={13} /> Export</span>

@@ -174,7 +174,16 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
 .cluster-summary__guide span { border: 1px solid #b66ca4; padding: 3px 4px; color: #ffd0e9; font-weight: 700; }
 .cluster-summary__guide b { min-width: 0; max-width: 210px; overflow: hidden; color: #d7d0d4; text-overflow: ellipsis; white-space: nowrap; }
 .cluster-summary__guide i { color: #e697c9; font-size: 14px; font-style: normal; }
+.cluster-summary__legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; font: 600 8px/1 "IBM Plex Mono", monospace; }
+.cluster-summary__legend-traffic { border-left: 3px solid #4f9938; padding-left: 5px; color: #78bd65; }
+.cluster-summary__legend-deploy { border-left: 3px dashed #9abb45; padding-left: 5px; color: #b8d467; }
+.cluster-summary__legend-dependency { border-left: 3px dotted #707070; padding-left: 5px; color: #a3a3a3; }
+.cluster-summary__legend-hierarchy { border-left: 3px solid #b66ca4; padding-left: 5px; color: #e5a9d1; }
+.cluster-summary__legend-focus { border-left: 3px solid #e697c9; padding-left: 5px; color: #ffd0e9; }
 .pipeline-toolbar-toggle { margin-left: 8px; }
+.cluster-focus-toggle { border-color: #b66ca4 !important; background: #2a1a27 !important; color: #f0b4d6 !important; }
+.cluster-focus-toggle:hover { background: #3d2438 !important; }
+.cluster-focus-toggle.is-active { border-color: #e697c9 !important; background: #3d1f35 !important; box-shadow: 0 0 0 1px rgba(230, 151, 201, 0.25); }
 .architecture-node { width: 100%; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px 9px; border: 1px solid #5b5b5b; background: #1b1b1b; box-shadow: none; transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1), border-color 180ms cubic-bezier(0.23, 1, 0.32, 1); }
 .architecture-node:hover { transform: translateY(-2px); border-color: #a7a7a7; }
 .architecture-node--journey-active { border-color: #a2bf59; background: #232c18; box-shadow: 0 0 0 1px rgba(162, 191, 89, 0.22); }
@@ -196,6 +205,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
 .kubernetes-stage-badge span { padding: 3px 4px; border: 1px solid #9d5b8d; background: #2a1a27; }
 .kubernetes-stage-badge em { padding: 3px 4px; border: 1px solid #cb8db8; background: #382131; color: #ffd0e9; font-style: normal; }
 .architecture-node:has(.kubernetes-stage-badge) { padding-top: 26px; animation: pipeline-stage-enter 280ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)) both; }
+.workload-expand-toggle { display: inline-flex; align-items: center; justify-content: center; width: max-content; max-width: 100%; border: 1px solid #9d5b8d; background: #2a1a27; color: #eeb8dc; padding: 4px 6px; font: 700 8px/1 "IBM Plex Mono", monospace; cursor: pointer; transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 160ms ease; }
+.workload-expand-toggle:hover { background: #3d2438; }
+.workload-expand-toggle:active { transform: scale(0.97); }
+.cluster-focus-node--active .architecture-node { border-color: #e697c9; background: #2a1a27; box-shadow: 0 0 0 1px rgba(230, 151, 201, 0.3); }
+.cluster-focus-node--dimmed { opacity: 0.1; }
 .pipeline-status { position: absolute; right: 7px; bottom: 7px; max-width: 92px; overflow: hidden; border: 1px solid; padding: 3px 4px; font: 700 7px/1 "IBM Plex Mono", monospace; letter-spacing: 0.04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .pipeline-status--success, .pipeline-execution-map__status--success { border-color: #709e43; background: #1c2914; color: #d7f0a8; }
 .pipeline-status--running, .pipeline-execution-map__status--running { border-color: #e1a34e; background: #31230f; color: #ffd481; animation: pipeline-status-pulse 1.2s ease-in-out infinite; }

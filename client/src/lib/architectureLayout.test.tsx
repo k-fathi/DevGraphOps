@@ -100,11 +100,11 @@ describe("expandable Kubernetes topology", () => {
   ] as any;
 
   it("hides namespace contents until the declared namespace is expanded and then layers the resources", () => {
-    expect(buildKubernetesPlan({ components }, false).placements).toEqual([]);
-    const closedNamespace = buildKubernetesPlan({ components }, true);
+    expect(buildKubernetesPlan({ components, relations: [] }, false).placements).toEqual([]);
+    const closedNamespace = buildKubernetesPlan({ components, relations: [] }, true);
     expect(closedNamespace.placements.map((placement) => placement.id)).toEqual(["namespace-shop"]);
 
-    const expandedNamespace = buildKubernetesPlan({ components }, true, ["namespace:shop"]);
+    const expandedNamespace = buildKubernetesPlan({ components, relations: [] }, true, ["namespace:shop"]);
     const byId = new Map(expandedNamespace.placements.map((placement) => [placement.id, placement]));
     expect(byId.get("namespace-shop")).toMatchObject({ layer: "NAMESPACE", row: 0 });
     expect(byId.get("ingress-shop")).toMatchObject({ layer: "INGRESS" });
@@ -112,6 +112,40 @@ describe("expandable Kubernetes topology", () => {
     expect(byId.get("deployment-shop")).toMatchObject({ layer: "WORKLOAD" });
     expect(byId.get("config-shop")).toMatchObject({ layer: "CONFIG & SECRETS" });
     expect(byId.get("secret-shop")).toMatchObject({ layer: "CONFIG & SECRETS" });
+  });
+
+  it("keeps a resource visible when its namespace is not declared, even if other Namespace manifests exist", () => {
+    const mixedNamespaceComponents = [
+      { id: "namespace-team", label: "Namespace: team", icon: "Namespace", domain: "cluster", namespace: "team" },
+      { id: "deployment-default", label: "Deployment: nginx", icon: "Deployment", domain: "cluster", namespace: "default" },
+    ] as any;
+    const plan = buildKubernetesPlan({ components: mixedNamespaceComponents, relations: [] }, true);
+
+    expect(plan.placements.map((placement) => placement.id)).toEqual(expect.arrayContaining(["namespace-team", "deployment-default"]));
+  });
+
+  it("keeps evidenced workload children hidden until each owning workload is expanded", () => {
+    const hierarchyComponents = [
+      ...components,
+      { id: "replicaset-shop", label: "ReplicaSet: web-6d9", icon: "ReplicaSet", domain: "cluster", namespace: "shop" },
+      { id: "pod-shop", label: "Pod: web-6d9-x2p", icon: "Pod", domain: "cluster", namespace: "shop" },
+    ] as any;
+    const relations = [
+      { id: "owns-deployment-replicaset", source: "deployment-shop", target: "replicaset-shop", label: "owns", kind: "dependency" },
+      { id: "owns-replicaset-pod", source: "replicaset-shop", target: "pod-shop", label: "owns", kind: "dependency" },
+    ] as any;
+
+    const closed = buildKubernetesPlan({ components: hierarchyComponents, relations }, true, ["namespace:shop"]);
+    expect(closed.placements.map((placement) => placement.id)).not.toContain("replicaset-shop");
+    expect(closed.placements.map((placement) => placement.id)).not.toContain("pod-shop");
+    expect(closed.placements.find((placement) => placement.id === "deployment-shop")).toMatchObject({ childIds: ["replicaset-shop"] });
+
+    const deploymentExpanded = buildKubernetesPlan({ components: hierarchyComponents, relations }, true, ["namespace:shop"], ["deployment-shop"]);
+    expect(deploymentExpanded.placements.map((placement) => placement.id)).toContain("replicaset-shop");
+    expect(deploymentExpanded.placements.map((placement) => placement.id)).not.toContain("pod-shop");
+
+    const fullHierarchy = buildKubernetesPlan({ components: hierarchyComponents, relations }, true, ["namespace:shop"], ["deployment-shop", "replicaset-shop"]);
+    expect(fullHierarchy.placements.find((placement) => placement.id === "pod-shop")).toMatchObject({ parentWorkloadId: "replicaset-shop", layer: "WORKLOAD CHILD" });
   });
 
   it("exposes a dedicated Cluster expand control", async () => {
@@ -125,5 +159,28 @@ describe("expandable Kubernetes topology", () => {
 
     await user.click(screen.getByRole("button", { name: "Expand topology" }));
     expect(onToggleCluster).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the Cluster legend including the Service to Deployment focus explanation", () => {
+    render(React.createElement(ReactFlowProvider, null, React.createElement(ContainerGroupNode, {
+      id: "cluster",
+      type: "containerGroup",
+      data: { label: "D · KUBERNETES CLUSTER · TOPOLOGY", color: "#df77b7", collapsed: false, childCount: 6, isCluster: true, providerIcon: "Kubernetes", clusterExpanded: true, namespaceCount: 0 },
+    } as any)));
+
+    expect(screen.getByLabelText("Cluster color and arrow legend").textContent).toContain("Focus: Service → Deployment");
+  });
+
+  it("exposes a dedicated Workload child expansion control", async () => {
+    const onToggleWorkload = vi.fn();
+    const user = userEvent.setup();
+    render(React.createElement(ReactFlowProvider, null, React.createElement(DevopsServiceNode, {
+      id: "deployment-shop",
+      type: "devopsService",
+      data: { label: "Deployment: web", icon: "Deployment", kubernetesStage: { layer: "WORKLOAD", childCount: 1, onToggleWorkload } },
+    } as any)));
+
+    await user.click(screen.getByRole("button", { name: "Expand 1 children" }));
+    expect(onToggleWorkload).toHaveBeenCalledTimes(1);
   });
 });

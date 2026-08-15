@@ -11,7 +11,7 @@ const analysis = {
   signals: { githubActions: false, gitlabCi: false, bitbucketPipelines: false, jenkins: false, sonarQube: false, nexus: false, terraform: false, ansible: false, aws: false, route53: false, kubernetes: true, argoCd: false, nginx: false, docker: false, dockerHub: false, dockerCompose: false, react: false, postgres: false, mongodb: false, prometheus: false, grafana: false },
   fileCount: 1,
   detectedFiles: ["k8s/service.yml"],
-  components: [{ id: "service", label: "Service: app", icon: "Service", domain: "cluster" as const, evidence: "k8s/service.yml" }],
+  components: [{ id: "service", label: "Service: app", icon: "Service", domain: "cluster" as const, evidence: "k8s/service.yml" }, { id: "deployment", label: "Deployment: app", icon: "Deployment", domain: "cluster" as const, evidence: "k8s/deployment.yml" }],
   relations: [{ id: "service-deployment", source: "service", target: "deployment", label: "Selects", kind: "traffic" as const, evidence: "k8s/service.yml" }],
   evidenceSnippets: [{ path: "k8s/service.yml", language: "yaml" as const, content: "apiVersion: v1\nkind: Service\nmetadata:\n  name: app" }],
 };
@@ -94,8 +94,17 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
 
     const clusterToggles = await screen.findAllByRole("button", { name: "Kubernetes: expand topology" });
     await user.click(clusterToggles.at(-1)!);
-    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, []));
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], []));
     expect(screen.getAllByRole("button", { name: "Kubernetes: collapse topology" }).length).toBeGreaterThan(0);
+  });
+
+  it("opens the declared Service to Deployment Focus Mode only when that relation is evidenced", async () => {
+    const user = userEvent.setup();
+    render(<DevOpsArchitectureCanvas />);
+
+    await user.click(await screen.findByRole("button", { name: "Cluster focus: Service → Deployment" }));
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], []));
+    expect(screen.getByRole("button", { name: "Cluster focus: exit" })).toBeTruthy();
   });
 
   it("explains that live execution status is currently GitHub Actions-only for other providers", async () => {

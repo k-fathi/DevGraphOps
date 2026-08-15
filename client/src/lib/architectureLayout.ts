@@ -24,7 +24,7 @@ type GroupDefinition = { id: GroupId; label: string; color: string; children: Ex
 type Size = { width: number; height: number };
 export type PipelineStagePlacement = { id: string; column: number; row: number; parallel: boolean; isStart: boolean; isEnd: boolean; independent: boolean };
 export type PipelinePlan = { stages: PipelineStagePlacement[]; columns: number; rows: number; entryLabels: string[]; terminalLabels: string[]; independentCount: number };
-export type KubernetesPlacement = { id: string; column: number; row: number; layer: string; namespaceId?: string; isNamespace: boolean };
+export type KubernetesPlacement = { id: string; column: number; row: number; layer: string; namespaceId?: string; isNamespace: boolean; childIds?: string[]; parentWorkloadId?: string };
 export type KubernetesPlan = { placements: KubernetesPlacement[]; columns: number; rows: number; namespaceCount: number; unscopedCount: number };
 
 export function buildPipelinePlan(analysis: Pick<RepositoryAnalysis, "components" | "relations">): PipelinePlan {
@@ -98,20 +98,32 @@ function kubernetesLayer(component: ExtractedComponent) {
   return { rank: 4, label: "RESOURCE" };
 }
 
-export function buildKubernetesPlan(analysis: Pick<RepositoryAnalysis, "components">, clusterExpanded: boolean, expandedNamespaceIds: string[] = []): KubernetesPlan {
+export function buildKubernetesPlan(analysis: Pick<RepositoryAnalysis, "components" | "relations">, clusterExpanded: boolean, expandedNamespaceIds: string[] = [], expandedWorkloadIds: string[] = []): KubernetesPlan {
   const resources = analysis.components.filter((component) => component.domain === "cluster");
   const namespaces = resources.filter((component) => component.icon === "Namespace");
+  const declaredNamespaceNames = new Set(namespaces.map((component) => component.namespace ?? component.label.replace(/^Namespace(?: scope)?:\s*/i, "")));
+  const byId = new Map(resources.map((component) => [component.id, component]));
+  const workloadIcons = new Set(["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"]);
+  const childrenByWorkload = new Map<string, string[]>();
+  for (const relation of analysis.relations.filter((relation) => relation.label === "owns" && byId.has(relation.source) && byId.has(relation.target))) {
+    const parent = byId.get(relation.source);
+    const child = byId.get(relation.target);
+    if (!workloadIcons.has(parent?.icon ?? "") || !["ReplicaSet", "Pod"].includes(child?.icon ?? "")) continue;
+    childrenByWorkload.set(relation.source, [...(childrenByWorkload.get(relation.source) ?? []), relation.target]);
+  }
   if (!clusterExpanded) return { placements: [], columns: 1, rows: 1, namespaceCount: namespaces.length, unscopedCount: resources.filter((component) => component.icon !== "Namespace" && !component.namespace).length };
   const expanded = new Set(expandedNamespaceIds);
+  const expandedWorkloads = new Set(expandedWorkloadIds);
+  const childToWorkload = new Map(Array.from(childrenByWorkload.entries()).flatMap(([parent, children]) => children.map((child) => [child, parent] as const)));
   const placements: KubernetesPlacement[] = namespaces.map((component, index) => ({ id: component.id, column: index, row: 0, layer: "NAMESPACE", isNamespace: true }));
-  const visibleResources = resources.filter((component) => component.icon !== "Namespace" && (namespaces.length === 0 || !component.namespace || expanded.has(`namespace:${component.namespace}`)));
+  const visibleResources = resources.filter((component) => component.icon !== "Namespace" && (namespaces.length === 0 || !component.namespace || !declaredNamespaceNames.has(component.namespace) || expanded.has(`namespace:${component.namespace}`)) && (!childToWorkload.has(component.id) || expandedWorkloads.has(childToWorkload.get(component.id)!)));
   if (namespaces.length === 0) {
     const rowsByLayer = new Map<number, number>();
     for (const component of visibleResources.sort((left, right) => kubernetesLayer(left).rank - kubernetesLayer(right).rank || left.label.localeCompare(right.label))) {
       const { rank, label } = kubernetesLayer(component);
       const row = rowsByLayer.get(rank) ?? 0;
       rowsByLayer.set(rank, row + 1);
-      placements.push({ id: component.id, column: rank, row, layer: label, isNamespace: false });
+      placements.push({ id: component.id, column: rank, row, layer: childToWorkload.has(component.id) ? "WORKLOAD CHILD" : label, isNamespace: false, childIds: childrenByWorkload.get(component.id), parentWorkloadId: childToWorkload.get(component.id) });
     }
     return { placements, columns: Math.max(1, ...placements.map((placement) => placement.column + 1)), rows: Math.max(1, ...placements.map((placement) => placement.row + 1)), namespaceCount: 0, unscopedCount: visibleResources.length };
   }
@@ -124,7 +136,7 @@ export function buildKubernetesPlan(analysis: Pick<RepositoryAnalysis, "componen
     const column = component.namespace && resourceColumns.has(component.namespace) ? resourceColumns.get(component.namespace)! : unscopedColumn;
     const row = (rowsByColumn.get(column) ?? 0) + 1;
     rowsByColumn.set(column, row);
-    placements.push({ id: component.id, column, row, layer: kubernetesLayer(component).label, namespaceId: component.namespace ? `namespace:${component.namespace}` : undefined, isNamespace: false });
+    placements.push({ id: component.id, column, row, layer: childToWorkload.has(component.id) ? "WORKLOAD CHILD" : kubernetesLayer(component).label, namespaceId: component.namespace ? `namespace:${component.namespace}` : undefined, isNamespace: false, childIds: childrenByWorkload.get(component.id), parentWorkloadId: childToWorkload.get(component.id) });
   }
   return { placements, columns: Math.max(1, ...placements.map((placement) => placement.column + 1)), rows: Math.max(1, ...placements.map((placement) => placement.row + 1)), namespaceCount: namespaces.length, unscopedCount: visibleResources.filter((component) => !component.namespace).length };
 }
@@ -262,7 +274,7 @@ function addGroupChildren(nodes: ArchitectureNode[], group: GroupDefinition, pip
       const placement = placements.get(child.id);
       if (!placement) continue;
       nodes.push({
-        ...serviceNode(child.id, child.label, child.icon, { x: 38 + placement.column * (LEAF_WIDTH + 68), y: 92 + placement.row * (LEAF_HEIGHT + 42) }, "devopsService", child.evidence, child.tools, undefined, undefined, { layer: placement.layer, namespace: placement.isNamespace, expanded: placement.isNamespace && kubernetesPlan.placements.some((candidate) => candidate.namespaceId === `namespace:${child.namespace ?? child.label.replace(/^Namespace(?: scope)?:\s*/i, "")}`) }),
+        ...serviceNode(child.id, child.label, child.icon, { x: 38 + placement.column * (LEAF_WIDTH + 68), y: 92 + placement.row * (LEAF_HEIGHT + 42) }, "devopsService", child.evidence, child.tools, undefined, undefined, { layer: placement.layer, namespace: placement.isNamespace, expanded: placement.isNamespace ? kubernetesPlan.placements.some((candidate) => candidate.namespaceId === `namespace:${child.namespace ?? child.label.replace(/^Namespace(?: scope)?:\s*/i, "")}`) : Boolean(placement.childIds?.some((id) => kubernetesPlan.placements.some((candidate) => candidate.id === id))), childCount: placement.childIds?.length }),
         parentId: group.id,
         extent: "parent",
         zIndex: 3,
@@ -360,10 +372,10 @@ export function buildJourneyDefinitions(analysis: RepositoryAnalysis, nodes: Arc
   ];
 }
 
-export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView, pipelineExpanded = false, pipelineClosing = false, clusterExpanded = false, expandedNamespaceIds: string[] = []): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
+export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView, pipelineExpanded = false, pipelineClosing = false, clusterExpanded = false, expandedNamespaceIds: string[] = [], expandedWorkloadIds: string[] = []): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
   const groups = createGroups(analysis);
   const pipelinePlan = buildPipelinePlan(analysis);
-  const kubernetesPlan = buildKubernetesPlan(analysis, clusterExpanded, expandedNamespaceIds);
+  const kubernetesPlan = buildKubernetesPlan(analysis, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds);
   const sizes = Object.fromEntries(groups.map((group) => [group.id, groupSize(group, view, pipelineExpanded, pipelinePlan, clusterExpanded, kubernetesPlan)])) as Partial<Record<GroupId, Size>>;
   const devOpsGroups = groups.filter((group) => group.id !== "user-path");
   const devOpsItems = [{ id: "repository", width: LEAF_WIDTH + 20, height: LEAF_HEIGHT }, ...devOpsGroups.map((group) => ({ id: group.id, ...sizes[group.id]! }))];

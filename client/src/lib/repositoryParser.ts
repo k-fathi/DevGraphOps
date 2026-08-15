@@ -319,14 +319,14 @@ export function candidatePaths(paths: string[]) {
   const kubernetesPriority = (path: string) => {
     const lower = path.toLowerCase();
     return [
-      /(kubernetes-manifests|all-in-one|manifests?\.ya?ml)$/.test(lower) ? 0 : 1,
+      /(all-in-one|deployed-all|all-resources)/.test(lower) ? 0 : /(kubernetes-manifests|manifests?\.ya?ml)$/.test(lower) ? 1 : 2,
       /(ingress|gateway|frontend)/.test(lower) ? 0 : 1,
       /(service|deployment|statefulset|daemonset|replicaset|pod|secret|config-?map|namespace|hpa|external-?secret)/.test(lower) ? 0 : 1,
       /(release|manifest|kubernetes-manifests|k8s|kubernetes)/.test(lower) ? 0 : 1,
       lower,
     ].join(":");
   };
-  const kubernetes = candidates.filter((path) => /(deployment|service|ingress|statefulset|daemonset|replicaset|pod|secret|config-?map|namespace|hpa|external-?secret|helm|chart\.yaml|values\.ya?ml|k8s|kubernetes|manifest)/i.test(path)).sort((a, b) => kubernetesPriority(a).localeCompare(kubernetesPriority(b)));
+  const kubernetes = candidates.filter((path) => /(deployment|service|ingress|statefulset|daemonset|replicaset|pod|secret|config-?map|namespace|hpa|external-?secret|helm|chart\.yaml|values\.ya?ml|k8s|kubernetes|manifest|deployed-all|all-resources)/i.test(path)).sort((a, b) => kubernetesPriority(a).localeCompare(kubernetesPriority(b)));
   const kubernetesFamilies = [/ingress|gateway/i, /services?\//i, /deployments?\//i, /statefulsets?\//i, /config-?maps?\//i, /secrets?\//i, /hpa|horizontalpodautoscaler/i, /eso|external-?secret/i, /namespaces?\//i, /replicasets?\//i, /daemonsets?\//i, /pods?\//i];
   const representativeKubernetes = [
     ...kubernetesFamilies.flatMap((family, index) => kubernetes.filter((path) => family.test(path)).slice(0, index === 4 ? 2 : 1)),
@@ -696,6 +696,16 @@ export function parseKubernetes(files: ContentFile[]) {
       const target = resources.find((candidate) => workloadKinds.has(candidate.kind.toLowerCase()) && candidate.name === targetName && candidate.namespace === resource.namespace);
       if (target) relations.push({ id: `${resource.id}-${target.id}`, source: resource.id, target: target.id, label: "scales", kind: "dependency", evidence: resource.source });
     }
+
+    const ownerReferences = Array.isArray(asRecord(resource.data.metadata)?.ownerReferences) ? asRecord(resource.data.metadata)?.ownerReferences as unknown[] : [];
+    for (const ownerReference of ownerReferences) {
+      const owner = asRecord(ownerReference);
+      const ownerKind = asString(owner?.kind);
+      const ownerName = asString(owner?.name);
+      if (!ownerKind || !ownerName) continue;
+      const parent = byKindAndName.get(resourceKey(ownerKind, ownerName, resource.namespace));
+      if (parent && parent.id !== resource.id) relations.push({ id: `owner-${parent.id}-${resource.id}`, source: parent.id, target: resource.id, label: "owns", kind: "dependency", evidence: resource.source });
+    }
   }
 
   const namespaceResources = resources.filter((resource) => resource.kind.toLowerCase() === "namespace");
@@ -720,6 +730,11 @@ export function parseKubernetes(files: ContentFile[]) {
 
   const dockerHubDetected = files.some((file) => containerPattern.test(file.content));
   return { components, relations, pipelineStages, pipelineRelations, dockerHubDetected };
+}
+
+export function prioritizeKubernetesComponents(components: ExtractedComponent[], relations: ArchitectureRelation[]) {
+  const ownershipEndpointIds = new Set(relations.filter((relation) => relation.label === "owns").flatMap((relation) => [relation.source, relation.target]));
+  return [...components.filter((component) => ownershipEndpointIds.has(component.id)), ...components.filter((component) => !ownershipEndpointIds.has(component.id))];
 }
 
 function buildBaseComponents(): ExtractedComponent[] {
@@ -759,7 +774,7 @@ export async function analyzePublicRepository(rawUrl: string): Promise<Repositor
   const primaryPipeline = (providerPipeline.length ? providerPipeline : yaml.pipelineStages).slice(0, 36);
   const primaryPipelineIds = new Set(primaryPipeline.map((component) => component.id));
   const primaryPipelineRelations = yaml.pipelineRelations.filter((relation) => primaryPipelineIds.has(relation.source) && primaryPipelineIds.has(relation.target));
-  const components = uniqueById([...buildBaseComponents(), ...pipelineDetails.components.slice(0, 12), ...primaryPipeline, ...terraform.components.slice(0, 12), ...yaml.components.slice(0, 24)]);
+  const components = uniqueById([...buildBaseComponents(), ...pipelineDetails.components.slice(0, 12), ...primaryPipeline, ...terraform.components.slice(0, 12), ...prioritizeKubernetesComponents(yaml.components, yaml.relations).slice(0, 24)]);
   const relations = uniqueRelations([...pipelineDetails.relations, ...primaryPipelineRelations, ...terraform.relations, ...yaml.relations]);
   const pipelineExecutionStatuses = parsed.provider === "github" && signals.githubActions ? await getGitHubPipelineExecutionStatuses(repository) : [];
 
