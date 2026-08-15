@@ -228,6 +228,7 @@ export function candidatePaths(paths: string[]) {
   const kubernetesPriority = (path: string) => {
     const lower = path.toLowerCase();
     return [
+      /(kubernetes-manifests|all-in-one|manifests?\.ya?ml)$/.test(lower) ? 0 : 1,
       /(ingress|gateway|frontend)/.test(lower) ? 0 : 1,
       /(service|deployment|statefulset|daemonset|pod)/.test(lower) ? 0 : 1,
       /(release|manifest|kubernetes-manifests|k8s|kubernetes)/.test(lower) ? 0 : 1,

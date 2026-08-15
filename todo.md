@@ -39,8 +39,8 @@
 
 ## Completion Audit
 
-- [ ] Audit each legacy unchecked item against the implemented Repogram code and test evidence.
-- [ ] Implement or correct any item that is not fully supported in the public-repository analysis flow.
+- [x] Audit each legacy unchecked item against the implemented Repogram code and test evidence.
+- [x] Implement or correct any item that is not fully supported in the public-repository analysis flow.
 - [x] Verify GitHub, GitLab, Bitbucket, detailed paths, and PNG/SVG export before closing the remaining tasks.
 - [ ] Save a final completion checkpoint after the audit is finished.
 
@@ -65,13 +65,13 @@
 - [x] Add an explicit User Journey control that traces a bold sequential path from user access to the live application.
 - [x] Add an explicit DevOps Journey control that traces source, pipeline stages, infrastructure, deployment, and production readiness in order.
 - [x] Surface sequential and parallel pipeline stages with clear stage numbering, lane grouping, and next-step relationships.
-- [ ] Verify that a real GitHub repository produces a readable end-to-end diagram without invented components or mock data.
+- [x] Verify that a real GitHub repository produces a readable end-to-end diagram without invented components or mock data.
 - [x] Review screenshots for journey comprehension and correct any ambiguous route ordering before final delivery.
 
 ## Evidence Integrity Verification
 
 - [x] Remove or explicitly mark signal-only nodes that have no source-file evidence.
-- [ ] Validate a real repository with an evidenced DNS or load balancer, ingress, service, and workload route.
+- [x] Validate a real repository with an evidenced DNS or load balancer, ingress, service, and workload route.
 - [x] Add and run a parser test for malformed YAML/Terraform input that verifies safe omission without invented output.
 - [x] Attach source-file evidence to every rendered relationship or omit the unsupported relationship.
 - [x] Expose relationship evidence in the diagram interface for inspection.
@@ -79,10 +79,10 @@
 ## User-requested Evidence and Spacing Refinement
 
 - [x] Do not render an empty domain, monitoring lane, service, stage, or icon when no parsed repository-file evidence exists.
-- [ ] Increase spacing between domains and nodes, and use clearer orthogonal routing so arrows remain traceable without overlap.
+- [x] Increase spacing between domains and nodes, and use clearer orthogonal routing so arrows remain traceable without overlap.
 
 - [x] Keep Docker stage chains in clear sequential rows to avoid wrapped-arrow ambiguity in dense pipeline groups.
 
-- [ ] Validate one real GitHub repository that shows its declared user entry and dense DevOps evidence in the same final diagram.
+- [x] Validate one real GitHub repository that shows its declared user entry and dense DevOps evidence in the same final diagram.
 
 - [x] Prioritize related Kubernetes Ingress, Service, and workload manifests when selecting files from large repositories.

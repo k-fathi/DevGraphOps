@@ -47,6 +47,7 @@ describe("parsePublicRepositoryUrl", () => {
       "release-cluster/frontend-service.yaml",
       "release-cluster/frontend-deployment.yaml",
       "release-cluster/cartservice-deployment.yaml",
+      "release/kubernetes-manifests.yaml",
       "values.yaml",
       "src/frontend/Dockerfile",
     ]);
@@ -55,6 +56,7 @@ describe("parsePublicRepositoryUrl", () => {
       "release-cluster/frontend-ingress.yaml",
       "release-cluster/frontend-service.yaml",
       "release-cluster/frontend-deployment.yaml",
+      "release/kubernetes-manifests.yaml",
     ]));
   });
 

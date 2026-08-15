@@ -150,3 +150,21 @@ Clean visual inspection of the unified map confirms that the User Journey occupi
 The immediate repeat analysis of the unified GitHub candidate was temporarily blocked by the public GitHub API rate limit. The revised Kubernetes selection strategy is covered by a unit test that asserts Ingress, Service, and Deployment files are all prioritized; the existing parser test independently proves the direct `user → ingress → service → deployment` evidence chain.
 
 An integrated selection test now confirms that the prioritized Kubernetes file set preserves the complete declared `Open application → HTTPS → Selects` route when Ingress, Service, and Deployment manifests are selected together. TypeScript validation and all eight unit tests pass after the change.
+
+The `lablabs/terraform-aws-eks-alb-ingress` source was reviewed as a Load Balancer candidate. It is a Terraform module for installing an ALB Ingress Controller and includes GitHub Actions and Terraform, but it does not declare an application Service and workload in the same repository, so it is not used to claim a complete user route.
+
+The actual `release/kubernetes-manifests.yaml` file in `GoogleCloudPlatform/microservices-demo` declares the frontend Deployment and the `frontend-external` Service with `type: LoadBalancer` and selector `app: frontend`. This file supplies direct repository evidence for `End User → LoadBalancer Service → frontend Deployment`; the revised manifest-priority selector is intended to retain it alongside ingress files when public API access is available.
+
+The finalized priority test explicitly keeps `release/kubernetes-manifests.yaml` alongside Ingress, Service, and Deployment files. This complements the direct raw-source check of the real repository's `frontend-external` LoadBalancer and `frontend` Deployment, and all eight unit tests continue to pass.
+
+In-app validation now succeeds after prioritizing the unified manifest: `GoogleCloudPlatform/microservices-demo` renders `End User → Service: frontend-external → Deployment: frontend` from `release/kubernetes-manifests.yaml`, alongside Docker stage relations, GitHub Actions jobs, and Terraform dependencies. The relationship evidence panel lists the exact source file for the LoadBalancer-to-workload route.
+
+The completed in-app view confirms 23 source-backed relationships, including the full user path and dense DevOps nodes. It keeps the user-entry lane above the separate build/delivery, infrastructure, and runtime domains, with no synthetic bridge arrows or empty monitoring group.
+
+With the DevOps trace enabled, the workspace assigns ordered labels to repository, Docker stages, CI jobs, Terraform resources, and declared runtime objects while preserving source paths in the trace panel. This confirms that sequential and parallel evidence is inspectable without adding a fabricated production endpoint.
+
+The normal architecture overview after tracing retains separate wide domain boxes for build/delivery, infrastructure, and runtime. The only long user-traffic edge runs in its own upper lane to the externally declared frontend Service, so it does not intersect the dense runtime dependency grid.
+
+Final clean-screenshot QA of `GoogleCloudPlatform/microservices-demo` confirms the rendered full path visually: the End User group is isolated above the workspace, its declared traffic line travels through empty canvas to the frontend-external Service, and the short service-to-workload edges remain contained inside the runtime box. Build/delivery, infrastructure, and runtime domains use separate wide boxes, with no empty monitoring lane or cross-domain fabricated arrow.
+
+Objective final-layout QA queried the rendered React Flow canvas directly: all 32 service and workflow node bounding boxes were measured, and the overlap set was empty (`nodeCount: 32`, `overlaps: []`). This supplements the clean screenshot review with a deterministic verification that cards do not sit on top of each other.
