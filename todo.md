@@ -10,21 +10,21 @@
 
 ## مهام النسخة الموسعة
 
-- [ ] توحيد تحليل روابط GitHub وGitLab وBitbucket العامة ضمن نموذج مزود واحد.
-- [ ] تنزيل وقراءة ملفات YAML وTerraform المرتبطة بالبنية مع قيود حجم وعدد آمنة.
-- [ ] استخراج روابط الخدمات والموارد من `depends_on` ومراجع الموارد وملفات Kubernetes.
-- [ ] ربط العلاقات المستخرجة بمسارات إضافية وشارات دلالية في الدياجرام.
-- [ ] إضافة تصدير مساحة الرسم الحالية بصيغتي PNG وSVG.
-- [ ] اختبار مزودات المستودعات والتصدير وحالات ملفات الإعداد غير الصالحة.
+- [x] توحيد تحليل روابط GitHub وGitLab وBitbucket العامة ضمن نموذج مزود واحد.
+- [x] تنزيل وقراءة ملفات YAML وTerraform المرتبطة بالبنية مع قيود حجم وعدد آمنة.
+- [x] استخراج روابط الخدمات والموارد من `depends_on` ومراجع الموارد وملفات Kubernetes.
+- [x] ربط العلاقات المستخرجة بمسارات إضافية وشارات دلالية في الدياجرام.
+- [x] إضافة تصدير مساحة الرسم الحالية بصيغتي PNG وSVG.
+- [x] اختبار مزودات المستودعات والتصدير وحالات ملفات الإعداد غير الصالحة.
 - [ ] إنشاء نقطة حفظ وتسليم النسخة الموسعة.
 
 ## مسارات التشغيل لكل مخطط
 
-- [ ] إنشاء نموذج مستقل لمسار المستخدم: User → DNS/CDN أو Load Balancer → Ingress/Proxy → Service → Application.
-- [ ] إنشاء نموذج مستقل لمسار DevOps: Source → build/test/security → image/build artifacts → registry → provision → deploy → observability.
-- [ ] تفصيل مراحل Docker وDocker Hub وDocker Compose وJenkins وملفات CI حسب الملفات المكتشفة في كل مستودع.
-- [ ] ربط المسارين بصريًا عند التطبيق الحي مع إبقاء دلالات المرور والنشر منفصلة.
-- [ ] اختبار عرض تفصيلي يحوي رحلتي المستخدم وDevOps مع مستودع يحتوي ملفات Docker وYAML وTerraform.
+- [x] إنشاء نموذج مستقل لمسار المستخدم: User → DNS/CDN أو Load Balancer → Ingress/Proxy → Service → Application.
+- [x] إنشاء نموذج مستقل لمسار DevOps: Source → build/test/security → image/build artifacts → registry → provision → deploy → observability.
+- [x] تفصيل مراحل Docker وDocker Hub وDocker Compose وJenkins وملفات CI حسب الملفات المكتشفة في كل مستودع.
+- [x] ربط المسارين بصريًا عند التطبيق الحي مع إبقاء دلالات المرور والنشر منفصلة.
+- [x] اختبار عرض تفصيلي يحوي رحلتي المستخدم وDevOps مع مستودع يحتوي ملفات Docker وYAML وTerraform.
 
 ## توحيد اللغة
 
@@ -36,3 +36,53 @@
 - [x] Replace bright blue and neon accents with the charcoal, green-route, pink, amber, and olive visual language from the provided references.
 - [x] Restyle group boundaries, nodes, edges, controls, and legends to use restrained contrast and dashed green operational paths.
 - [x] Verify visual contrast and diagram readability against the supplied reference aesthetic.
+
+## Completion Audit
+
+- [ ] Audit each legacy unchecked item against the implemented Repogram code and test evidence.
+- [ ] Implement or correct any item that is not fully supported in the public-repository analysis flow.
+- [x] Verify GitHub, GitLab, Bitbucket, detailed paths, and PNG/SVG export before closing the remaining tasks.
+- [ ] Save a final completion checkpoint after the audit is finished.
+
+## Provider Access Reliability
+
+- [x] Add a same-origin service path for GitLab and Bitbucket public APIs so the browser can complete provider analysis reliably.
+- [x] Validate the service path against a public GitLab repository and a public Bitbucket repository before marking provider support complete.
+- [x] Route Bitbucket API requests through the verified `bitbucket.org/api/2.0` origin and repeat the public-repository validation.
+
+## Fullstack Upgrade Recovery
+
+- [x] Reconcile the fullstack upgrade with the existing Repogram app shell and dependencies before adding the repository-analysis service.
+
+## Product Identity
+
+- [x] Replace the remaining ArchTrace product identity with Repogram in visible interface copy and page metadata.
+
+## Traceable Real-Repository Journeys
+
+- [x] Remove preview and mock analysis data from the user-facing workspace; require a real public repository before drawing a diagram.
+- [x] Derive only evidenced nodes and relations from repository files, with the source file available for inspection.
+- [x] Add an explicit User Journey control that traces a bold sequential path from user access to the live application.
+- [x] Add an explicit DevOps Journey control that traces source, pipeline stages, infrastructure, deployment, and production readiness in order.
+- [x] Surface sequential and parallel pipeline stages with clear stage numbering, lane grouping, and next-step relationships.
+- [ ] Verify that a real GitHub repository produces a readable end-to-end diagram without invented components or mock data.
+- [x] Review screenshots for journey comprehension and correct any ambiguous route ordering before final delivery.
+
+## Evidence Integrity Verification
+
+- [x] Remove or explicitly mark signal-only nodes that have no source-file evidence.
+- [ ] Validate a real repository with an evidenced DNS or load balancer, ingress, service, and workload route.
+- [x] Add and run a parser test for malformed YAML/Terraform input that verifies safe omission without invented output.
+- [x] Attach source-file evidence to every rendered relationship or omit the unsupported relationship.
+- [x] Expose relationship evidence in the diagram interface for inspection.
+
+## User-requested Evidence and Spacing Refinement
+
+- [x] Do not render an empty domain, monitoring lane, service, stage, or icon when no parsed repository-file evidence exists.
+- [ ] Increase spacing between domains and nodes, and use clearer orthogonal routing so arrows remain traceable without overlap.
+
+- [x] Keep Docker stage chains in clear sequential rows to avoid wrapped-arrow ambiguity in dense pipeline groups.
+
+- [ ] Validate one real GitHub repository that shows its declared user entry and dense DevOps evidence in the same final diagram.
+
+- [x] Prioritize related Kubernetes Ingress, Service, and workload manifests when selecting files from large repositories.

@@ -82,3 +82,71 @@
 - يجب أن يشغل المخطط التشغيلي أغلب مساحة العرض الأول، وأن تكون مسارات المرور والنشر أوضح من خطوط الاعتماد الثانوية.
 - تكون لغة المنتج عربية افتراضيًا، فيما تبقى أسماء المستودعات والمنصات والخدمات والبروتوكولات ومسارات الملفات باللغة التقنية الأصلية.
 - يظهر اسم ArchTrace بهوية Mono تقنية متباعدة متصلة بالعلامة ذات العقد الثلاث، لا كنص عنوان تقليدي.
+
+## Traceability Audit — August 2026
+
+### Findings from the Current Real-Repository Screenshot
+
+1. The current preview remains visible while a repository is loading, which violates the no-mock-data requirement and makes the visual output appear unrelated to the submitted repository.
+2. The diagram has an understandable left-to-right macro layout, but dense grids in the pipeline and runtime groups make sibling ordering ambiguous. Repeated `Next` edge labels do not tell a first-time viewer whether stages are sequential or parallel.
+3. The User Journey and DevOps delivery paths cross the same canvas without an interaction that isolates one route. A viewer must inspect every edge manually to understand a journey.
+
+### Chosen Direction: Traceable Journeys
+
+- Start with an empty evidence state; draw only after a real public repository has been analyzed successfully.
+- Present **User Journey** and **DevOps Journey** as explicit, selectable controls. Selecting either path dims unrelated nodes and renders its ordered edges with a bold, animated route.
+- Put numbered stage markers on the selected journey. The DevOps sequence is source → CI stage(s) → artifact/image → infrastructure → deployment → live application.
+- Represent parallel pipeline work in a clearly bounded lane with a `Parallel` label, while keeping the sequence of the enclosing stages unambiguous.
+- Attach every rendered node and relation to discovered evidence. The inspector must show the source file path; unsupported or absent tools must never be invented.
+
+### Real-Repository Verification Source
+
+Tested URL: `https://github.com/argoproj/argo-cd`. The resulting view identifies GitHub Actions workflow jobs, Dockerfile build stages, Kubernetes runtime resources, and the associated evidence file names. The trace controls are visible after analysis; the next verification step is confirming their selected-state route emphasis and stage ordering.
+
+The later verification confirmed that the workspace displays an empty evidence state during loading instead of a sample map. It now labels missing infrastructure as `NO EVIDENCE` and describes an unobserved public-access path as `External path not declared`; this prevents the map from presenting inferred services as discovered facts.
+
+Export verification: the real repository diagram generated `argoproj-argo-cd-architecture.png` successfully from the current workspace.
+
+The corresponding SVG export action was triggered from the same real-repository workspace and is being verified in browser download history.
+
+Download history confirmed `argoproj-argo-cd-architecture.svg`, completing verification of both requested export formats.
+
+Provider verification note: direct same-origin GitLab analysis succeeds when the public API is available, while repeated uncached provider requests can return the documented rate-limit/unavailability state. The interface intentionally clears the canvas and shows the explicit provider error rather than retaining a stale or sample diagram.
+
+The standard GitLab URL rendered its real CI-stage evidence in the UI. The Bitbucket validation URL also rendered successfully; because it contained no detected deployment configuration, Repogram showed `NO EVIDENCE` groups and zero signals rather than inventing a pipeline or infrastructure.
+
+After the no-inference refinement, the same Bitbucket repository no longer renders a declared application runtime or an external access edge. It presents only the repository, end-user context, and explicitly empty evidence groups.
+
+Real-configuration validation source: `https://github.com/HoussemDellai/ProductsStoreOnKubernetes` contains GitHub Actions, Dockerfile stages, Docker Compose, Terraform, Kubernetes, and Ansible paths. Repogram displayed the discovered Docker/Compose stages, Ansible evidence, and extracted dependency labels. Where the bounded file selection did not include a runtime manifest, it explicitly marked the runtime lane as `NO EVIDENCE`.
+
+The priority-aware tree scan then surfaced concrete Terraform resources, Prometheus, and Grafana for the same repository. Visual review confirmed that the detailed journey controls, evidence labels, dashed group boundaries, and file-derived nodes remain readable. The product must stay English-only and retain the user-requested charcoal/green/pink/amber/olive reference palette; contrary advisory suggestions for Arabic or cyan are intentionally not applied.
+
+Full user-journey validation target: the small public `inlets/ingress-example` repository declares `deployment.yaml`, `service.yaml`, and `ingress.yml`. Its documented flow routes Internet traffic through an Ingress to a Service and then to Pods created by the Deployment, making it appropriate for proving the complete declared request path without fabricated infrastructure.
+
+The Repogram verification of `inlets/ingress-example` produced the declared, numbered User Journey: End User → Ingress → Service → Deployment → Live application, with each discovered service carrying its corresponding YAML filename. The runtime grid is ordered by observed traffic role (Ingress, Service, then workload) so the canvas now follows the same left-to-right reading order as the numbered trace.
+
+Final strict-evidence check: the DevOps validation repository displays only parsed Docker stages, Docker Compose services, GitHub Actions jobs, and Terraform resources, each with a file label; it no longer shows generic signal-only nodes. In the ingress repository, the terminal `Declared Application Runtime` is also labeled with `deployment.yaml`, while the only label without a file remains the conceptual End User entry point.
+
+Evidence-and-spacing refinement: empty pipeline, infrastructure, and runtime groups are now removed instead of being rendered as `NO EVIDENCE` boxes. The displayed relationship list gives every visible route a source path. Node cards, grid gaps, group padding, ELK layer gaps, and canvas height have all been increased to preserve separation between observed stages and make a selected journey easier to read.
+
+Final relation-integrity refinement: layout no longer draws repository-to-stage, stage-to-infrastructure, infrastructure-to-runtime, or other cross-domain bridge arrows merely to imply an order. The canvas renders only connections extracted from a configuration file, and the dense Docker/Terraform validation shows these source-backed paths with substantially more space between cards and group boundaries.
+
+The Kubernetes validation now derives the public entry from the Ingress manifest itself: `End User → Ingress` carries `ingress.yml`, while `Ingress → Service` carries the same file and `Service → Deployment` carries `service.yaml`. The conceptual live-application endpoint is absent, so no unproved terminal node remains on the diagram.
+
+Dense-layout visual QA: the `ProductsStoreOnKubernetes` workspace now renders its file-backed Docker, Compose, CI, and Terraform nodes after an empty-user-group regression fix. Pipeline cards occupy a three-column grid with wide gaps; Terraform resources occupy a separate, widely spaced group; and all remaining arrows connect only their parsed source and target nodes without cross-domain bridge arrows.
+
+Clean-screenshot inspection confirms that the dense pipeline grid has distinct card boundaries and horizontal/vertical lanes between rows, while the Terraform group is separated by substantial canvas space. The remaining `builds` and `depends_on` paths stay inside their respective file-backed groups and do not cross the empty inter-domain area; labels remain adjacent to their own arrows.
+
+After the final layout adjustment, each four-stage Dockerfile chain occupies one left-to-right row (`base → build → publish → final`) with its own horizontal arrow lane. This removes the previous row-wrap ambiguity in the dense pipeline group; Compose and CI nodes occupy the final row, leaving their evidence-backed dependencies visually distinct.
+
+Candidate unified-validation repository: `https://github.com/FirelyTeam/kubernetes-cluster-deployment` contains Terraform for AKS infrastructure and Helm configuration that deploys an NGINX Ingress Controller and cert-manager. Its documentation describes Terraform provisioning, Helm deployment, and the ingress controller's external IP, so it is a relevant public source for testing a combined infrastructure and public-entry map.
+
+Preferred unified-validation candidate: `https://github.com/GoogleCloudPlatform/microservices-demo` exposes GitHub Actions, Dockerfiles, Terraform, Kubernetes manifests, and a frontend external Service. It is better suited to exercising a single evidence-only map because its public documentation lists all of those repository directories and the external frontend service.
+
+Unified validation completed with `GoogleCloudPlatform/microservices-demo`: the final evidence-only output includes a GitHub repository node, Docker build-stage relations, GitHub Actions jobs, Terraform infrastructure dependencies, and `End User → Ingress: frontend-ingress` sourced directly from `release-cluster/frontend-ingress.yaml`. No empty monitoring lane or synthetic runtime endpoint is shown.
+
+Clean visual inspection of the unified map confirms that the User Journey occupies an isolated upper lane, build/delivery uses a compact four-column grid at lower left, infrastructure uses a separate grid at lower center, and the evidenced ingress is isolated at lower right. The user-entry route has a dedicated vertical and horizontal lane, avoiding overlap with the build and Terraform dependency paths.
+
+The immediate repeat analysis of the unified GitHub candidate was temporarily blocked by the public GitHub API rate limit. The revised Kubernetes selection strategy is covered by a unit test that asserts Ingress, Service, and Deployment files are all prioritized; the existing parser test independently proves the direct `user → ingress → service → deployment` evidence chain.
+
+An integrated selection test now confirms that the prioritized Kubernetes file set preserves the complete declared `Open application → HTTPS → Selects` route when Ingress, Service, and Deployment manifests are selected together. TypeScript validation and all eight unit tests pass after the change.

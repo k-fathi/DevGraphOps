@@ -7,7 +7,7 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { resolveIcon } from "@/lib/iconResolver";
 
 export type ContainerNodeData = { label: string; color: string; collapsed: boolean; childCount: number };
-export type ServiceNodeData = { label: string; icon: string };
+export type ServiceNodeData = { label: string; icon: string; evidence?: string; journeyNumber?: number; journeyActive?: boolean; journeyDimmed?: boolean };
 type ContainerNode = Node<ContainerNodeData, "containerGroup">;
 type ServiceNode = Node<ServiceNodeData, "devopsService" | "pipelineStep">;
 
@@ -38,10 +38,12 @@ export function ContainerGroupNode({ data }: NodeProps<ContainerNode>) {
 
 export function DevopsServiceNode({ data }: NodeProps<ServiceNode>) {
   return (
-    <div className="architecture-node" title={data.label}>
+    <div className={`architecture-node ${data.journeyActive ? "architecture-node--journey-active" : ""} ${data.journeyDimmed ? "architecture-node--journey-dimmed" : ""}`} title={data.evidence ? `${data.label} — evidence: ${data.evidence}` : data.label}>
       <Handle type="target" position={Position.Left} className="architecture-handle" />
+      {data.journeyNumber && <span className="architecture-node__sequence" aria-label={`Journey step ${data.journeyNumber}`}>{data.journeyNumber}</span>}
       <NodeIcon icon={data.icon} label={data.label} />
       <div className="architecture-node__label">{data.label}</div>
+      {data.evidence && <div className="architecture-node__evidence">{data.evidence.split("/").at(-1)}</div>}
       <Handle type="source" position={Position.Right} className="architecture-handle" />
     </div>
   );

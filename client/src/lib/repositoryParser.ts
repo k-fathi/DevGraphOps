@@ -1,5 +1,5 @@
 /**
- * ArchTrace repository intelligence: public GitHub, GitLab, and Bitbucket repositories are
+ * Repogram repository intelligence: public GitHub, GitLab, and Bitbucket repositories are
  * normalized into one model; selected YAML and Terraform files add concrete deployment stages and resource links.
  */
 import { parseAllDocuments } from "yaml";
@@ -74,9 +74,11 @@ type ContentFile = { path: string; content: string };
 type TerraformBlock = { key: string; id: string; body: string; path: string; label: string; icon: string };
 type KubernetesResource = { id: string; kind: string; name: string; source: string; data: JsonRecord };
 
-const MAX_TREE_ENTRIES = 700;
-const MAX_CONFIG_FILES = 22;
+// Conservative limits keep public, unauthenticated provider APIs responsive while still surfacing core deployment evidence.
+const MAX_TREE_ENTRIES = 800;
+const MAX_CONFIG_FILES = 16;
 const MAX_FILE_BYTES = 160_000;
+const providerHeaders = { "User-Agent": "Repogram/1.0 (public repository analysis)" };
 
 const emptySignals = (): RepositorySignals => ({
   githubActions: false,
@@ -108,6 +110,12 @@ function asRecord(value: unknown): JsonRecord | undefined {
 
 function asString(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function referencedNames(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => typeof item === "string" ? [item] : [asString(asRecord(item)?.job)]).filter(Boolean);
 }
 
 function slug(value: string) {
@@ -215,19 +223,41 @@ function isConfigCandidate(path: string) {
   );
 }
 
-function candidatePaths(paths: string[]) {
-  return paths
-    .filter(isConfigCandidate)
-    .sort((a, b) => {
-      const aPriority = /docker-compose|dockerfile|jenkinsfile|\.gitlab-ci|bitbucket-pipelines|\.tf$/i.test(a) ? 0 : 1;
-      const bPriority = /docker-compose|dockerfile|jenkinsfile|\.gitlab-ci|bitbucket-pipelines|\.tf$/i.test(b) ? 0 : 1;
-      return aPriority - bPriority || a.localeCompare(b);
-    })
-    .slice(0, MAX_CONFIG_FILES);
+export function candidatePaths(paths: string[]) {
+  const candidates = paths.filter(isConfigCandidate).sort((a, b) => a.localeCompare(b));
+  const kubernetesPriority = (path: string) => {
+    const lower = path.toLowerCase();
+    return [
+      /(ingress|gateway|frontend)/.test(lower) ? 0 : 1,
+      /(service|deployment|statefulset|daemonset|pod)/.test(lower) ? 0 : 1,
+      /(release|manifest|kubernetes-manifests|k8s|kubernetes)/.test(lower) ? 0 : 1,
+      lower,
+    ].join(":");
+  };
+  const categories: Array<{ paths: string[]; limit: number }> = [
+    { paths: candidates.filter((path) => /docker-compose|(^|\/)dockerfile$/i.test(path)), limit: 3 },
+    { paths: candidates.filter((path) => /(^|\/)jenkinsfile$|\.github\/workflows|\.gitlab-ci|bitbucket-pipelines/i.test(path)), limit: 3 },
+    { paths: candidates.filter((path) => /\.tf$/i.test(path)), limit: 3 },
+    { paths: candidates.filter((path) => /(deployment|service|ingress|statefulset|daemonset|helm|chart\.yaml|values\.ya?ml|k8s|kubernetes|manifest)/i.test(path)).sort((a, b) => kubernetesPriority(a).localeCompare(kubernetesPriority(b))), limit: 5 },
+    { paths: candidates.filter((path) => /\.ya?ml$/i.test(path)), limit: 3 },
+  ];
+  const selected: string[] = [];
+  const add = (path: string) => {
+    if (selected.length < MAX_CONFIG_FILES && !selected.includes(path)) selected.push(path);
+  };
+  for (const category of categories) category.paths.slice(0, category.limit).forEach(add);
+  candidates.forEach(add);
+  return selected;
+}
+
+function prioritizeRepositoryPaths(paths: string[]) {
+  const selectedConfig = candidatePaths(paths);
+  const remaining = paths.filter((path) => !selectedConfig.includes(path)).slice(0, Math.max(0, MAX_TREE_ENTRIES - selectedConfig.length));
+  return [...selectedConfig, ...remaining];
 }
 
 async function fetchJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, { headers: { ...providerHeaders, ...headers } });
   if (!response.ok) throw new Error(String(response.status));
   return (await response.json()) as T;
 }
@@ -236,7 +266,7 @@ async function getGitHubRepository(identity: Omit<RepositoryIdentity, "branch">)
   const headers = { Accept: "application/vnd.github+json" };
   const repository = await fetchJson<{ default_branch: string; html_url: string }>(`https://api.github.com/repos/${identity.owner}/${identity.repo}`, headers);
   const tree = await fetchJson<{ tree?: Array<{ path: string; type: string }> }>(`https://api.github.com/repos/${identity.owner}/${identity.repo}/git/trees/${encodeURIComponent(repository.default_branch)}?recursive=1`, headers);
-  return { branch: repository.default_branch, url: repository.html_url || identity.url, paths: (tree.tree ?? []).filter((entry) => entry.type === "blob").map((entry) => entry.path).slice(0, MAX_TREE_ENTRIES) };
+  return { branch: repository.default_branch, url: repository.html_url || identity.url, paths: prioritizeRepositoryPaths((tree.tree ?? []).filter((entry) => entry.type === "blob").map((entry) => entry.path)) };
 }
 
 async function getGitLabRepository(identity: Omit<RepositoryIdentity, "branch">): Promise<RepositoryDescriptor> {
@@ -244,20 +274,21 @@ async function getGitLabRepository(identity: Omit<RepositoryIdentity, "branch">)
   const paths: string[] = [];
   let page = 1;
   while (page && paths.length < MAX_TREE_ENTRIES) {
-    const response = await fetch(`https://gitlab.com/api/v4/projects/${project.id}/repository/tree?recursive=true&per_page=100&page=${page}&ref=${encodeURIComponent(project.default_branch)}`);
+    const response = await fetch(`https://gitlab.com/api/v4/projects/${project.id}/repository/tree?recursive=true&per_page=100&page=${page}&ref=${encodeURIComponent(project.default_branch)}`, { headers: providerHeaders });
     if (!response.ok) break;
     const entries = (await response.json()) as Array<{ path: string; type: string }>;
     paths.push(...entries.filter((entry) => entry.type === "blob").map((entry) => entry.path));
     const nextPage = response.headers.get("x-next-page");
     page = nextPage ? Number(nextPage) : 0;
   }
-  return { branch: project.default_branch, url: project.web_url || identity.url, paths: paths.slice(0, MAX_TREE_ENTRIES) };
+  return { branch: project.default_branch, url: project.web_url || identity.url, paths: prioritizeRepositoryPaths(paths) };
 }
 
 async function getBitbucketRepository(identity: Omit<RepositoryIdentity, "branch">): Promise<RepositoryDescriptor> {
-  const repository = await fetchJson<{ mainbranch?: { name?: string }; links?: { html?: { href?: string } } }>(`https://api.bitbucket.org/2.0/repositories/${identity.owner}/${identity.repo}`);
+  const bitbucketApi = "https://bitbucket.org/api/2.0";
+  const repository = await fetchJson<{ mainbranch?: { name?: string }; links?: { html?: { href?: string } } }>(`${bitbucketApi}/repositories/${identity.owner}/${identity.repo}`);
   const branch = repository.mainbranch?.name || "main";
-  const rootResponse = await fetch(`https://api.bitbucket.org/2.0/repositories/${identity.owner}/${identity.repo}/src/?pagelen=100`);
+  const rootResponse = await fetch(`${bitbucketApi}/repositories/${identity.owner}/${identity.repo}/src/?pagelen=100`, { headers: providerHeaders });
   if (!rootResponse.ok) throw new Error(String(rootResponse.status));
   const fetchRef = rootResponse.url.match(/\/src\/([^/]+)/)?.[1] || encodeURIComponent(branch);
   const paths: string[] = [];
@@ -268,10 +299,10 @@ async function getBitbucketRepository(identity: Omit<RepositoryIdentity, "branch
     const directory = pending.shift()!;
     if (seenDirectories.has(directory)) continue;
     seenDirectories.add(directory);
-    let next = `https://api.bitbucket.org/2.0/repositories/${identity.owner}/${identity.repo}/src/${fetchRef}/${directory ? `${encodedPath(directory)}/` : ""}?pagelen=100`;
+    let next = `${bitbucketApi}/repositories/${identity.owner}/${identity.repo}/src/${fetchRef}/${directory ? `${encodedPath(directory)}/` : ""}?pagelen=100`;
 
     while (next && paths.length < MAX_TREE_ENTRIES) {
-      const response = await fetch(next);
+      const response = await fetch(next, { headers: providerHeaders });
       if (!response.ok) break;
       const page = (await response.json()) as { values?: Array<{ path?: string; type?: string }>; next?: string };
       for (const entry of page.values ?? []) {
@@ -282,13 +313,13 @@ async function getBitbucketRepository(identity: Omit<RepositoryIdentity, "branch
       next = page.next ?? "";
     }
   }
-  return { branch, url: repository.links?.html?.href || identity.url, paths: paths.slice(0, MAX_TREE_ENTRIES), fetchRef };
+  return { branch, url: repository.links?.html?.href || identity.url, paths: prioritizeRepositoryPaths(paths), fetchRef };
 }
 
 async function fetchConfigFile(identity: RepositoryIdentity, path: string): Promise<ContentFile | undefined> {
   try {
     if (identity.provider === "github") {
-      const response = await fetch(`https://api.github.com/repos/${identity.owner}/${identity.repo}/contents/${encodedPath(path)}?ref=${encodeURIComponent(identity.branch)}`, { headers: { Accept: "application/vnd.github+json" } });
+      const response = await fetch(`https://api.github.com/repos/${identity.owner}/${identity.repo}/contents/${encodedPath(path)}?ref=${encodeURIComponent(identity.branch)}`, { headers: { ...providerHeaders, Accept: "application/vnd.github+json" } });
       if (!response.ok) return undefined;
       const file = (await response.json()) as { content?: string; size?: number };
       if (!file.content || (file.size ?? 0) > MAX_FILE_BYTES) return undefined;
@@ -297,8 +328,8 @@ async function fetchConfigFile(identity: RepositoryIdentity, path: string): Prom
 
     const base = identity.provider === "gitlab"
       ? `https://gitlab.com/api/v4/projects/${encodeURIComponent(`${identity.owner}/${identity.repo}`)}/repository/files/${encodeURIComponent(path)}/raw?ref=${encodeURIComponent(identity.branch)}`
-      : `https://api.bitbucket.org/2.0/repositories/${identity.owner}/${identity.repo}/src/${identity.fetchRef ?? encodeURIComponent(identity.branch)}/${encodedPath(path)}`;
-    const response = await fetch(base);
+      : `https://bitbucket.org/api/2.0/repositories/${identity.owner}/${identity.repo}/src/${identity.fetchRef ?? encodeURIComponent(identity.branch)}/${encodedPath(path)}`;
+    const response = await fetch(base, { headers: providerHeaders });
     if (!response.ok) return undefined;
     const size = Number(response.headers.get("content-length") || 0);
     if (size > MAX_FILE_BYTES) return undefined;
@@ -320,7 +351,7 @@ function terraformLabel(type: string, name: string) {
   return `${type.replace(/[_-]/g, " ")}: ${name}`;
 }
 
-function parseTerraform(files: ContentFile[]) {
+export function parseTerraform(files: ContentFile[]) {
   const components: ExtractedComponent[] = [];
   const blocks: TerraformBlock[] = [];
   const relations: ArchitectureRelation[] = [];
@@ -352,21 +383,26 @@ function parseTerraform(files: ContentFile[]) {
 
 function parsePipelineDetailFiles(files: ContentFile[]) {
   const components: ExtractedComponent[] = [];
+  const relations: ArchitectureRelation[] = [];
   for (const file of files) {
     const lowerPath = file.path.toLowerCase();
     if (/(^|\/)jenkinsfile$/.test(lowerPath)) {
       const stages = Array.from(file.content.matchAll(/stage\s*\(\s*["']([^"']+)["']/g)).map((match) => match[1]);
-      stages.slice(0, 8).forEach((stage) => components.push({ id: `jenkins-stage-${slug(stage)}`, label: `Jenkins: ${stage}`, icon: "Jenkins", domain: "pipeline", evidence: file.path }));
+      const stageNodes = stages.slice(0, 8).map((stage) => ({ id: `jenkins-stage-${slug(stage)}`, label: `Jenkins: ${stage}`, icon: "Jenkins", domain: "pipeline" as const, evidence: file.path }));
+      components.push(...stageNodes);
+      stageNodes.slice(0, -1).forEach((stage, index) => relations.push({ id: `${stage.id}-${stageNodes[index + 1].id}`, source: stage.id, target: stageNodes[index + 1].id, label: "then", kind: "deployment", evidence: file.path }));
     }
     if (/(^|\/)dockerfile$/.test(lowerPath)) {
       const stages = Array.from(file.content.matchAll(/^\s*FROM\s+([^\s]+)(?:\s+AS\s+([^\s]+))?/gim));
-      stages.slice(0, 6).forEach((match, index) => {
+      const stageNodes = stages.slice(0, 6).map((match, index) => {
         const label = match[2] ? `Docker: ${match[2]}` : `Docker base: ${match[1]}`;
-        components.push({ id: `docker-stage-${slug(file.path)}-${index}`, label, icon: "Docker", domain: "pipeline", evidence: file.path });
+        return { id: `docker-stage-${slug(file.path)}-${index}`, label, icon: "Docker", domain: "pipeline" as const, evidence: file.path };
       });
+      components.push(...stageNodes);
+      stageNodes.slice(0, -1).forEach((stage, index) => relations.push({ id: `${stage.id}-${stageNodes[index + 1].id}`, source: stage.id, target: stageNodes[index + 1].id, label: "builds", kind: "deployment", evidence: file.path }));
     }
   }
-  return uniqueById(components);
+  return { components: uniqueById(components), relations: uniqueRelations(relations) };
 }
 
 function nestedValues(value: unknown): unknown[] {
@@ -376,17 +412,20 @@ function nestedValues(value: unknown): unknown[] {
   return [record, ...Object.values(record).flatMap(nestedValues)];
 }
 
-function parseKubernetes(files: ContentFile[]) {
+export function parseKubernetes(files: ContentFile[]) {
   const components: ExtractedComponent[] = [];
   const relations: ArchitectureRelation[] = [];
   const resources: KubernetesResource[] = [];
   const pipelineStages: ExtractedComponent[] = [];
+  const pipelineRelations: ArchitectureRelation[] = [];
   const containerPattern = /docker\.io|hub\.docker\.com|registry-1\.docker\.io/i;
 
   for (const file of files.filter((entry) => /\.ya?ml$/i.test(entry.path))) {
     let values: unknown[] = [];
     try {
-      values = parseAllDocuments(file.content).flatMap((document) => nestedValues(document.toJS({ maxAliasCount: 20 })));
+      const documents = parseAllDocuments(file.content);
+      if (documents.some((document) => document.errors.length > 0)) continue;
+      values = documents.flatMap((document) => nestedValues(document.toJS({ maxAliasCount: 20 })));
     } catch {
       continue;
     }
@@ -399,19 +438,31 @@ function parseKubernetes(files: ContentFile[]) {
         for (const [name, candidate] of Object.entries(record)) {
           const job = asRecord(candidate);
           const stage = asString(job?.stage);
-          if (stage) pipelineStages.push({ id: `gitlab-stage-${slug(name)}`, label: `${stage}: ${name}`, icon: "GitLab", domain: "pipeline", evidence: file.path });
+          if (stage) {
+            const id = `gitlab-stage-${slug(name)}`;
+            pipelineStages.push({ id, label: `${stage}: ${name}`, icon: "GitLab", domain: "pipeline", evidence: file.path });
+            referencedNames(job?.needs).forEach((dependency) => pipelineRelations.push({ id: `gitlab-needs-${slug(dependency)}-${slug(name)}`, source: `gitlab-stage-${slug(dependency)}`, target: id, label: "needs", kind: "deployment", evidence: file.path }));
+          }
         }
       }
     }
     if (lowerPath.startsWith(".github/workflows/")) {
       const root = values.map((value) => asRecord(value)).find((value): value is JsonRecord => Boolean(value));
       const jobs = asRecord(root?.["jobs"]);
-      for (const [name] of Object.entries(jobs ?? {})) pipelineStages.push({ id: `github-job-${slug(name)}`, label: `Job: ${name}`, icon: "GitHub Actions", domain: "pipeline", evidence: file.path });
+      for (const [name, candidate] of Object.entries(jobs ?? {})) {
+        const id = `github-job-${slug(name)}`;
+        pipelineStages.push({ id, label: `Job: ${name}`, icon: "GitHub Actions", domain: "pipeline", evidence: file.path });
+        referencedNames(asRecord(candidate)?.needs).forEach((dependency) => pipelineRelations.push({ id: `github-needs-${slug(dependency)}-${slug(name)}`, source: `github-job-${slug(dependency)}`, target: id, label: "needs", kind: "deployment", evidence: file.path }));
+      }
     }
     if (/docker-compose/i.test(lowerPath)) {
       const root = values.map((value) => asRecord(value)).find((value): value is JsonRecord => Boolean(value));
       const services = asRecord(root?.["services"]);
-      for (const serviceName of Object.keys(services ?? {}).slice(0, 6)) pipelineStages.push({ id: `compose-${slug(serviceName)}`, label: `Compose: ${serviceName}`, icon: "Docker Compose", domain: "pipeline", evidence: file.path });
+      for (const [serviceName, serviceDefinition] of Object.entries(services ?? {}).slice(0, 6)) {
+        const id = `compose-${slug(serviceName)}`;
+        pipelineStages.push({ id, label: `Compose: ${serviceName}`, icon: "Docker Compose", domain: "pipeline", evidence: file.path });
+        referencedNames(asRecord(serviceDefinition)?.depends_on).forEach((dependency) => pipelineRelations.push({ id: `compose-depends-${slug(dependency)}-${slug(serviceName)}`, source: `compose-${slug(dependency)}`, target: id, label: "depends_on", kind: "deployment", evidence: file.path }));
+      }
     }
 
     for (const value of values) {
@@ -434,6 +485,7 @@ function parseKubernetes(files: ContentFile[]) {
   for (const resource of resources) {
     const spec = asRecord(resource.data.spec);
     if (resource.kind.toLowerCase() === "ingress") {
+      relations.push({ id: `ingress-public-entry-${resource.id}`, source: "user", target: resource.id, label: "Open application", kind: "traffic", evidence: resource.source });
       const rules = Array.isArray(spec?.rules) ? spec.rules : [];
       for (const rule of rules) {
         const http = asRecord(asRecord(rule)?.http);
@@ -449,6 +501,9 @@ function parseKubernetes(files: ContentFile[]) {
     }
 
     if (resource.kind.toLowerCase() === "service") {
+      if (asString(spec?.type) === "LoadBalancer") {
+        relations.push({ id: `service-public-entry-${resource.id}`, source: "user", target: resource.id, label: "Open application", kind: "traffic", evidence: resource.source });
+      }
       const selector = asRecord(spec?.selector);
       if (selector) {
         for (const workload of resources.filter((candidate) => workloadKinds.has(candidate.kind.toLowerCase()))) {
@@ -473,56 +528,19 @@ function parseKubernetes(files: ContentFile[]) {
   }
 
   const dockerHubDetected = files.some((file) => containerPattern.test(file.content));
-  return { components, relations, pipelineStages, dockerHubDetected };
+  return { components, relations, pipelineStages, pipelineRelations, dockerHubDetected };
 }
 
-function buildBaseComponents(repository: RepositoryIdentity, signals: RepositorySignals): ExtractedComponent[] {
-  const providerCi = repository.provider === "github" ? signals.githubActions : repository.provider === "gitlab" ? signals.gitlabCi : signals.bitbucketPipelines;
-  const providerIcon = repository.provider === "github" ? "GitHub Actions" : repository.provider === "gitlab" ? "GitLab" : "Bitbucket";
-  const components: ExtractedComponent[] = [
-    { id: "user", label: "End User", icon: "Users", domain: "user" },
-    { id: "dns", label: signals.route53 ? "Route 53" : "DNS / Routing", icon: signals.route53 ? "Route 53" : "DNS", domain: "user" },
-    { id: "load-balancer", label: "Load Balancer", icon: "Load Balancer", domain: "user" },
-    ...(providerCi ? [{ id: `${repository.provider}-ci`, label: repository.provider === "github" ? "GitHub Actions" : repository.provider === "gitlab" ? "GitLab CI" : "Bitbucket Pipelines", icon: providerIcon, domain: "pipeline" as const }] : []),
-    ...(signals.jenkins ? [{ id: "jenkins", label: "Jenkins", icon: "Jenkins", domain: "pipeline" as const }] : []),
-    ...(signals.sonarQube ? [{ id: "sonarqube", label: "SonarQube", icon: "SonarQube", domain: "pipeline" as const }] : []),
-    ...(signals.docker ? [{ id: "docker", label: "Docker Build", icon: "Docker", domain: "pipeline" as const }] : []),
-    ...(signals.dockerHub ? [{ id: "docker-hub", label: "Docker Hub", icon: "Docker Hub", domain: "pipeline" as const }] : []),
-    ...(signals.dockerCompose ? [{ id: "docker-compose", label: "Docker Compose", icon: "Docker Compose", domain: "pipeline" as const }] : []),
-    ...(signals.nexus ? [{ id: "nexus", label: "Nexus", icon: "Nexus", domain: "pipeline" as const }] : []),
-    ...(signals.terraform ? [{ id: "terraform", label: "Terraform", icon: "Terraform", domain: "infrastructure" as const }] : []),
-    ...(signals.ansible ? [{ id: "ansible", label: "Ansible", icon: "Ansible", domain: "infrastructure" as const }] : []),
-    ...(signals.aws ? [{ id: "aws", label: "AWS", icon: "AWS", domain: "infrastructure" as const }] : []),
-    ...(signals.argoCd ? [{ id: "argo-cd", label: "Argo CD", icon: "Argo CD", domain: "infrastructure" as const }] : []),
-    ...(signals.kubernetes ? [{ id: "ingress", label: "Ingress", icon: "Ingress", domain: "cluster" as const }, { id: "service", label: "Service", icon: "Service", domain: "cluster" as const }, { id: "deployment", label: "Deployment", icon: "Deployment", domain: "cluster" as const }, { id: "pod", label: "Pod", icon: "Pod", domain: "cluster" as const }] : []),
-    ...(signals.prometheus ? [{ id: "prometheus", label: "Prometheus", icon: "Prometheus", domain: "cluster" as const }] : []),
-    ...(signals.grafana ? [{ id: "grafana", label: "Grafana", icon: "Grafana", domain: "cluster" as const }] : []),
-  ];
-  return uniqueById(components);
-}
-
-function buildBaseRelations(components: ExtractedComponent[]): ArchitectureRelation[] {
-  const ids = new Set(components.map((component) => component.id));
-  const relations: ArchitectureRelation[] = [];
-  const add = (id: string, source: string, target: string, label: string, kind: RelationKind) => {
-    if (ids.has(source) && (ids.has(target) || target === "live-app")) relations.push({ id, source, target, label, kind });
-  };
-  add("user-dns", "user", "dns", "Resolve", "traffic");
-  add("dns-lb", "dns", "load-balancer", "HTTPS", "traffic");
-  add("lb-ingress", "load-balancer", "ingress", "Route", "traffic");
-  add("lb-live", "load-balancer", "live-app", "HTTPS", "traffic");
-  add("ingress-service", "ingress", "service", "HTTPS", "traffic");
-  add("service-deployment", "service", "deployment", "Route", "traffic");
-  add("deployment-pod", "deployment", "pod", "Schedule", "deployment");
-  add("pod-live", "pod", "live-app", "Serve", "traffic");
-  add("prometheus-grafana", "prometheus", "grafana", "Metrics", "observability");
-  return relations;
+function buildBaseComponents(): ExtractedComponent[] {
+  // The End User is the conceptual origin of the declared traffic route. Every
+  // service/tool node is added only by one of the file-content parsers below.
+  return [{ id: "user", label: "End User", icon: "Users", domain: "user" }];
 }
 
 function classifyError(provider: RepositoryProvider, error: unknown) {
   const code = String(error);
   if (code.includes("404")) return "The repository was not found or is not public.";
-  if (code.includes("403") || code.includes("429")) return `The public ${provider === "github" ? "GitHub" : provider === "gitlab" ? "GitLab" : "Bitbucket"} API rate limit has been reached. Try again shortly.`;
+  if (code.includes("403") || code.includes("429")) return `The public ${provider === "github" ? "GitHub" : provider === "gitlab" ? "GitLab" : "Bitbucket"} API is currently rate-limited or unavailable. Try again shortly.`;
   return "The public repository data could not be reached.";
 }
 
@@ -545,8 +563,8 @@ export async function analyzePublicRepository(rawUrl: string): Promise<Repositor
   signals.dockerHub = yaml.dockerHubDetected;
   signals.kubernetes ||= yaml.components.some((component) => component.icon !== "Docker Compose");
 
-  const components = uniqueById([...buildBaseComponents(repository, signals), ...pipelineDetails.slice(0, 8), ...yaml.pipelineStages.slice(0, 8), ...terraform.components.slice(0, 10), ...yaml.components.slice(0, 14)]);
-  const relations = uniqueRelations([...buildBaseRelations(components), ...terraform.relations, ...yaml.relations]);
+  const components = uniqueById([...buildBaseComponents(), ...pipelineDetails.components.slice(0, 8), ...yaml.pipelineStages.slice(0, 8), ...terraform.components.slice(0, 10), ...yaml.components.slice(0, 14)]);
+  const relations = uniqueRelations([...pipelineDetails.relations, ...yaml.pipelineRelations, ...terraform.relations, ...yaml.relations]);
 
   return {
     repository,
@@ -555,36 +573,5 @@ export async function analyzePublicRepository(rawUrl: string): Promise<Repositor
     detectedFiles: Array.from(new Set([...detectedFiles, ...contents.map((file) => file.path)])).slice(0, 10),
     components,
     relations,
-  };
-}
-
-export function createPreviewAnalysis(): RepositoryAnalysis {
-  const repository: RepositoryIdentity = { provider: "github", owner: "example", repo: "platform-service", branch: "main", url: "https://github.com/example/platform-service" };
-  const signals: RepositorySignals = {
-    githubActions: true, gitlabCi: false, bitbucketPipelines: false, jenkins: true, sonarQube: true, nexus: true, terraform: true, ansible: false, aws: true, route53: true, kubernetes: true, argoCd: true, nginx: true, docker: true, dockerHub: true, dockerCompose: true, react: true, postgres: true, mongodb: false, prometheus: true, grafana: true,
-  };
-  const previewComponents: ExtractedComponent[] = [
-    ...buildBaseComponents(repository, signals),
-    { id: "github-job-build", label: "build: container", icon: "GitHub Actions", domain: "pipeline", evidence: ".github/workflows/build.yml" },
-    { id: "github-job-test", label: "test: unit", icon: "GitHub Actions", domain: "pipeline", evidence: ".github/workflows/build.yml" },
-    { id: "tf-network", label: "aws vpc: production", icon: "AWS", domain: "infrastructure", evidence: "infra/network.tf" },
-    { id: "tf-lb", label: "aws lb: public", icon: "Load Balancer", domain: "infrastructure", evidence: "infra/network.tf" },
-    { id: "k8s-api", label: "Deployment: api", icon: "Deployment", domain: "cluster", evidence: "deploy/api.yaml" },
-    { id: "k8s-api-service", label: "Service: api", icon: "Service", domain: "cluster", evidence: "deploy/api.yaml" },
-  ];
-  const components = uniqueById(previewComponents);
-  return {
-    repository,
-    signals,
-    fileCount: 47,
-    detectedFiles: [".github/workflows/build.yml", "Dockerfile", "docker-compose.yml", "infra/network.tf", "deploy/api.yaml"],
-    components,
-    relations: uniqueRelations([
-      ...buildBaseRelations(components),
-      { id: "preview-network-lb", source: "tf-network", target: "tf-lb", label: "depends_on", kind: "dependency", evidence: "infra/network.tf" },
-      { id: "preview-lb-api", source: "tf-lb", target: "k8s-api", label: "Deploy", kind: "deployment", evidence: "infra/network.tf" },
-      { id: "preview-api-service", source: "k8s-api-service", target: "k8s-api", label: "Route", kind: "traffic", evidence: "deploy/api.yaml" },
-    ]),
-    isPreview: true,
   };
 }

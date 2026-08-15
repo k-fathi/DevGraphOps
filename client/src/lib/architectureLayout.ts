@@ -1,5 +1,5 @@
 /**
- * ArchTrace layout system: a charcoal technical-board composition with quiet, dashed functional routes.
+ * Repogram layout system: a charcoal technical-board composition with quiet, dashed functional routes.
  * ELK lays out the DevOps delivery path while a parallel user lane converges only at the production app.
  */
 import ELK from "elkjs/lib/elk.bundled.js";
@@ -9,12 +9,15 @@ import type { ContainerNodeData, ServiceNodeData } from "@/components/architectu
 
 export type ArchitectureView = "high" | "detailed";
 export type ArchitectureNode = Node<ContainerNodeData, "containerGroup"> | Node<ServiceNodeData, "devopsService"> | Node<ServiceNodeData, "pipelineStep">;
-export type ArchitectureEdge = Edge<{ kind: RelationKind }>;
+export type ArchitectureEdge = Edge<{ kind: RelationKind; evidence?: string }>;
+export type JourneyMode = "overview" | "user" | "devops";
+export type JourneyStep = { id: string; label: string; evidence?: string; parallel?: boolean };
+export type JourneyDefinition = { id: Exclude<JourneyMode, "overview">; title: string; summary: string; nodeIds: string[]; edgeIds: string[]; steps: JourneyStep[] };
 
 const elk = new ELK();
-const LEAF_WIDTH = 110;
-const LEAF_HEIGHT = 112;
-const CHILD_GAP = 16;
+const LEAF_WIDTH = 128;
+const LEAF_HEIGHT = 124;
+const CHILD_GAP = 34;
 
 type GroupId = "user-path" | "cicd" | "infrastructure" | "cluster";
 type GroupDefinition = { id: GroupId; label: string; color: string; children: ExtractedComponent[] };
@@ -22,17 +25,18 @@ type Size = { width: number; height: number };
 
 function groupSize(children: ExtractedComponent[], view: ArchitectureView) {
   if (view === "high") return { width: 172, height: 110 };
-  const columns = Math.max(1, Math.min(children.length || 1, 4));
-  const rows = Math.max(1, Math.ceil(Math.max(children.length, 1) / 4));
-  return { width: Math.max(184, 32 + columns * (LEAF_WIDTH + CHILD_GAP)), height: 46 + rows * (LEAF_HEIGHT + CHILD_GAP) + 18 };
+  const maxColumns = children.every((child) => child.domain === "pipeline") ? 4 : 3;
+  const columns = Math.max(1, Math.min(children.length || 1, maxColumns));
+  const rows = Math.max(1, Math.ceil(Math.max(children.length, 1) / maxColumns));
+  return { width: Math.max(216, 60 + columns * (LEAF_WIDTH + CHILD_GAP)), height: 70 + rows * (LEAF_HEIGHT + CHILD_GAP) + 28 };
 }
 
 function iconForProvider(provider: RepositoryAnalysis["repository"]["provider"]) {
   return provider === "github" ? "GitHub" : provider === "gitlab" ? "GitLab" : "Bitbucket";
 }
 
-function serviceNode(id: string, label: string, icon: string, position: { x: number; y: number }, type: "pipelineStep" | "devopsService" = "devopsService"): ArchitectureNode {
-  return { id, type, position, draggable: false, selectable: false, data: { label, icon }, style: { width: LEAF_WIDTH, height: LEAF_HEIGHT } };
+function serviceNode(id: string, label: string, icon: string, position: { x: number; y: number }, type: "pipelineStep" | "devopsService" = "devopsService", evidence?: string): ArchitectureNode {
+  return { id, type, position, draggable: false, selectable: false, data: { label, icon, evidence }, style: { width: LEAF_WIDTH, height: LEAF_HEIGHT } };
 }
 
 function groupNode(definition: GroupDefinition, position: { x: number; y: number }, size: Size, view: ArchitectureView): ArchitectureNode {
@@ -48,7 +52,7 @@ function groupNode(definition: GroupDefinition, position: { x: number; y: number
   };
 }
 
-function makeEdge(id: string, source: string, target: string, label: string, kind: RelationKind): ArchitectureEdge {
+function makeEdge(id: string, source: string, target: string, label: string, kind: RelationKind, evidence?: string): ArchitectureEdge {
   const styleByKind: Record<RelationKind, { stroke: string; strokeWidth: number; strokeDasharray?: string; animated: boolean }> = {
     traffic: { stroke: "#4f9938", strokeWidth: 2.1, strokeDasharray: "8 6", animated: false },
     deployment: { stroke: "#769b36", strokeWidth: 1.8, strokeDasharray: "7 5", animated: false },
@@ -57,7 +61,7 @@ function makeEdge(id: string, source: string, target: string, label: string, kin
   };
   const style = styleByKind[kind];
   return {
-    id, source, target, type: "step", animated: style.animated, label, data: { kind }, selectable: false,
+    id, source, target, type: "step", animated: style.animated, label, data: { kind, evidence }, selectable: false,
     style: { stroke: style.stroke, strokeWidth: style.strokeWidth, strokeDasharray: style.strokeDasharray },
     labelStyle: { fill: "#d8d8d8", fontSize: 10, fontWeight: 600 }, labelBgStyle: { fill: "#171717", fillOpacity: 0.96 }, labelBgPadding: [5, 3], labelBgBorderRadius: 2,
   };
@@ -65,20 +69,31 @@ function makeEdge(id: string, source: string, target: string, label: string, kin
 
 function createGroups(analysis: RepositoryAnalysis): GroupDefinition[] {
   const byDomain = (domain: ArchitectureDomain) => analysis.components.filter((component) => component.domain === domain);
-  const fallback = (domain: ArchitectureDomain, id: string, label: string, icon: string): ExtractedComponent[] => [{ id, label, icon, domain }];
-  return [
-    { id: "user-path", label: "A · USER JOURNEY · LIVE PATH", color: "#4f9938", children: byDomain("user").length ? byDomain("user") : fallback("user", "user-missing", "User access", "Users") },
-    { id: "cicd", label: "B · DEVOPS · BUILD & DELIVERY", color: "#7d9d36", children: byDomain("pipeline").length ? byDomain("pipeline") : fallback("pipeline", "pipeline-missing", "Pipeline config", "CI Pipeline") },
-    { id: "infrastructure", label: "C · DEVOPS · INFRASTRUCTURE", color: "#f08b2b", children: byDomain("infrastructure").length ? byDomain("infrastructure") : fallback("infrastructure", "infra-missing", "Infrastructure config", "Custom Cloud Service") },
-    { id: "cluster", label: "D · DEVOPS · RUNTIME & OBSERVABILITY", color: "#df77b7", children: byDomain("cluster").length ? byDomain("cluster") : fallback("cluster", "cluster-missing", "Runtime config", "ConfigMap") },
+  const runtimeFlowRank = (component: ExtractedComponent) => {
+    if (component.icon === "Ingress" || component.icon === "Load Balancer") return 0;
+    if (component.icon === "Service") return 1;
+    if (["Deployment", "StatefulSet", "DaemonSet", "Pod"].includes(component.icon)) return 2;
+    return 3;
+  };
+  const user = analysis.relations.some((relation) => relation.source === "user" && relation.kind === "traffic" && Boolean(relation.evidence)) ? byDomain("user") : [];
+  const pipeline = byDomain("pipeline");
+  const infrastructure = byDomain("infrastructure");
+  const cluster = byDomain("cluster").sort((left, right) => runtimeFlowRank(left) - runtimeFlowRank(right) || left.label.localeCompare(right.label));
+  const hasObservedMonitoring = cluster.some((component) => /prometheus|grafana|monitoring|observability/i.test(`${component.label} ${component.icon}`));
+  const candidateGroups: GroupDefinition[] = [
+    { id: "user-path", label: "A · USER JOURNEY · LIVE PATH", color: "#4f9938", children: user },
+    { id: "cicd", label: "B · DEVOPS · BUILD & DELIVERY", color: "#7d9d36", children: pipeline },
+    { id: "infrastructure", label: "C · DEVOPS · INFRASTRUCTURE", color: "#f08b2b", children: infrastructure },
+    { id: "cluster", label: hasObservedMonitoring ? "D · DEVOPS · RUNTIME & OBSERVABILITY" : "D · DEVOPS · RUNTIME", color: "#df77b7", children: cluster },
   ];
+  return candidateGroups.filter((group) => group.children.length > 0);
 }
 
 async function calculateDevOpsLayout(items: Array<{ id: string; width: number; height: number }>) {
   const layout = await elk.layout({
     id: "devops-root",
     layoutOptions: {
-      "elk.algorithm": "layered", "elk.direction": "RIGHT", "elk.edgeRouting": "ORTHOGONAL", "elk.spacing.nodeNode": "58", "elk.layered.spacing.nodeNodeBetweenLayers": "82", "elk.padding": "[top=36,left=40,bottom=36,right=40]",
+      "elk.algorithm": "layered", "elk.direction": "RIGHT", "elk.edgeRouting": "ORTHOGONAL", "elk.spacing.nodeNode": "108", "elk.layered.spacing.nodeNodeBetweenLayers": "156", "elk.padding": "[top=64,left=72,bottom=64,right=72]",
     },
     children: items,
     edges: items.slice(0, -1).map((item, index) => ({ id: `elk-${item.id}-${items[index + 1].id}`, sources: [item.id], targets: [items[index + 1].id] })),
@@ -87,83 +102,131 @@ async function calculateDevOpsLayout(items: Array<{ id: string; width: number; h
 }
 
 function addGroupChildren(nodes: ArchitectureNode[], group: GroupDefinition) {
+  const columns = group.id === "cicd" ? 4 : 3;
   group.children.forEach((child, index) => {
-    const column = index % 4;
-    const row = Math.floor(index / 4);
+    const column = index % columns;
+    const row = Math.floor(index / columns);
     nodes.push({
-      ...serviceNode(child.id, child.label, child.icon, { x: 18 + column * (LEAF_WIDTH + CHILD_GAP), y: 44 + row * (LEAF_HEIGHT + CHILD_GAP) }, child.domain === "pipeline" ? "pipelineStep" : "devopsService"),
+      ...serviceNode(child.id, child.label, child.icon, { x: 30 + column * (LEAF_WIDTH + CHILD_GAP), y: 58 + row * (LEAF_HEIGHT + CHILD_GAP) }, child.domain === "pipeline" ? "pipelineStep" : "devopsService", child.evidence),
       parentId: group.id, extent: "parent", zIndex: 3,
     });
   });
 }
 
-function findFlowEndpoint(children: ExtractedComponent[], position: "first" | "last", fallback: string) {
-  return position === "first" ? children[0]?.id ?? fallback : children.at(-1)?.id ?? fallback;
+function orderedPipelineSteps(analysis: RepositoryAnalysis) {
+  const allPipeline = analysis.components.filter((component) => component.domain === "pipeline");
+  const evidencedPipeline = allPipeline.filter((component) => Boolean(component.evidence));
+  const pipeline = evidencedPipeline.length ? evidencedPipeline : allPipeline;
+  const ids = new Set(pipeline.map((component) => component.id));
+  const edges = analysis.relations.filter((relation) => relation.kind === "deployment" && ids.has(relation.source) && ids.has(relation.target));
+  const incoming = new Map(pipeline.map((component) => [component.id, 0]));
+  const outgoing = new Map(pipeline.map((component) => [component.id, [] as string[]]));
+  for (const edge of edges) {
+    incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1);
+    outgoing.get(edge.source)?.push(edge.target);
+  }
+  const byId = new Map(pipeline.map((component) => [component.id, component]));
+  const pending = pipeline.filter((component) => (incoming.get(component.id) ?? 0) === 0).map((component) => component.id);
+  const ordered: JourneyStep[] = [];
+  const seen = new Set<string>();
+  while (pending.length) {
+    const batch = pending.splice(0);
+    for (const id of batch) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const component = byId.get(id);
+      if (component) ordered.push({ id, label: component.label, evidence: component.evidence, parallel: batch.length > 1 });
+      for (const target of outgoing.get(id) ?? []) {
+        incoming.set(target, (incoming.get(target) ?? 1) - 1);
+        if ((incoming.get(target) ?? 0) === 0) pending.push(target);
+      }
+    }
+  }
+  for (const component of pipeline) if (!seen.has(component.id)) ordered.push({ id: component.id, label: component.label, evidence: component.evidence, parallel: true });
+  return ordered;
 }
 
-function orderEdges(children: ExtractedComponent[], prefix: string, kind: RelationKind, finalLabel: string) {
-  return children.slice(0, -1).map((child, index) => makeEdge(`${prefix}-${child.id}`, child.id, children[index + 1].id, index === children.length - 2 ? finalLabel : "Next", kind));
+export function buildJourneyDefinitions(analysis: RepositoryAnalysis, nodes: ArchitectureNode[], edges: ArchitectureEdge[]): JourneyDefinition[] {
+  const known = new Set(nodes.map((node) => node.id));
+  const labels = new Map<string, JourneyStep>([
+    ["repository", { id: "repository", label: `${analysis.repository.owner}/${analysis.repository.repo}` }],
+    ...analysis.components.map((component) => [component.id, { id: component.id, label: component.label, evidence: component.evidence }] as const),
+  ]);
+  const presentEdges = new Set(edges.map((edge) => edge.id));
+  const trafficEdges = edges.filter((edge) => edge.data?.kind === "traffic");
+  const queue: Array<{ id: string; nodes: string[]; edgeIds: string[] }> = [{ id: "user", nodes: ["user"], edgeIds: [] }];
+  const workloadIds = new Set(analysis.components.filter((component) => ["Deployment", "StatefulSet", "DaemonSet", "Pod"].includes(component.icon)).map((component) => component.id));
+  const visited = new Set(["user"]);
+  let userPath: { nodes: string[]; edgeIds: string[] } = { nodes: [], edgeIds: [] };
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (workloadIds.has(current.id)) { userPath = { nodes: current.nodes, edgeIds: current.edgeIds }; break; }
+    for (const edge of trafficEdges.filter((candidate) => candidate.source === current.id)) {
+      if (visited.has(edge.target)) continue;
+      visited.add(edge.target);
+      queue.push({ id: edge.target, nodes: [...current.nodes, edge.target], edgeIds: [...current.edgeIds, edge.id] });
+    }
+  }
+  const userEdgeIds = userPath.edgeIds.filter((id) => presentEdges.has(id));
+  const userNodeIds = userPath.nodes.filter((id) => known.has(id));
+  const userSteps = userNodeIds.map((id) => labels.get(id) ?? { id, label: id });
+  const userPathIsDeclared = userNodeIds.length > 2;
+  const runtimeAvailable = userNodeIds.some((id) => workloadIds.has(id));
+
+  const pipelineSteps = orderedPipelineSteps(analysis).filter((step) => known.has(step.id));
+  const observedDomainSteps = (domain: ArchitectureDomain) => {
+    const items = analysis.components.filter((component) => component.domain === domain && known.has(component.id));
+    const evidenced = items.filter((component) => Boolean(component.evidence));
+    return (evidenced.length ? evidenced : items).map((component) => ({ id: component.id, label: component.label, evidence: component.evidence }));
+  };
+  const infrastructure = observedDomainSteps("infrastructure");
+  const runtime = observedDomainSteps("cluster");
+  const runtimeDeclared = runtime.length > 0;
+  const devOpsEdgeIds = edges.filter((edge) => edge.data?.kind === "deployment" && known.has(edge.source) && known.has(edge.target)).map((edge) => edge.id);
+  const devOpsNodeIds = Array.from(new Set(["repository", "cicd", ...pipelineSteps.map((step) => step.id), "infrastructure", ...infrastructure.map((step) => step.id), "cluster", ...runtime.map((step) => step.id)].filter((id) => known.has(id))));
+  const devOpsSteps = [labels.get("repository")!, ...pipelineSteps, ...infrastructure, ...runtime];
+
+  return [
+    { id: "user", title: "User Journey", summary: !runtimeAvailable ? "No application runtime or public-access path is declared in the analyzed files, so a user journey cannot be inferred." : userPathIsDeclared ? "Trace the declared request path from user access to the application runtime." : "No DNS, gateway, load balancer, or ingress path is declared in the analyzed files. The external path is shown as unresolved rather than inferred.", nodeIds: userNodeIds, edgeIds: userEdgeIds, steps: userSteps },
+    { id: "devops", title: "DevOps Journey", summary: runtimeDeclared ? "Trace observed delivery evidence from repository to the declared application runtime. Live availability is not inferred." : "Trace observed delivery evidence from repository to the last discovered deployment stage.", nodeIds: devOpsNodeIds, edgeIds: devOpsEdgeIds, steps: devOpsSteps },
+  ];
 }
 
 export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
   const groups = createGroups(analysis);
-  const sizes = Object.fromEntries(groups.map((group) => [group.id, groupSize(group.children, view)])) as Record<GroupId, Size>;
+  const sizes = Object.fromEntries(groups.map((group) => [group.id, groupSize(group.children, view)])) as Partial<Record<GroupId, Size>>;
   const devOpsGroups = groups.filter((group) => group.id !== "user-path");
-  const devOpsItems = [{ id: "repository", width: LEAF_WIDTH + 20, height: LEAF_HEIGHT }, ...devOpsGroups.map((group) => ({ id: group.id, ...sizes[group.id] })), { id: "live-app", width: 132, height: LEAF_HEIGHT }];
+  const devOpsItems = [{ id: "repository", width: LEAF_WIDTH + 20, height: LEAF_HEIGHT }, ...devOpsGroups.map((group) => ({ id: group.id, ...sizes[group.id]! }))];
   const positions = await calculateDevOpsLayout(devOpsItems);
-  const devOpsBaseY = 300;
-  const userWidth = sizes["user-path"].width;
-  const userPosition = { x: Math.max(42, Math.floor((positions["live-app"].x - userWidth) / 2)), y: 34 };
+  const devOpsBaseY = 370;
+  const userWidth = sizes["user-path"]?.width ?? 172;
+  const lastItem = devOpsItems.at(-1)!;
+  const terminalX = positions[lastItem.id].x + lastItem.width + 110;
+  const userPosition = { x: Math.max(42, Math.floor((terminalX - userWidth) / 2)), y: 34 };
+  const userGroup = groups.find((group) => group.id === "user-path");
   const nodes: ArchitectureNode[] = [
-    groupNode(groups[0], userPosition, sizes["user-path"], view),
+    ...(userGroup ? [groupNode(userGroup, userPosition, sizes["user-path"]!, view)] : []),
     serviceNode("repository", `${analysis.repository.owner}/${analysis.repository.repo}`, iconForProvider(analysis.repository.provider), { x: positions.repository.x, y: positions.repository.y + devOpsBaseY }, "devopsService"),
-    ...devOpsGroups.map((group) => groupNode(group, { x: positions[group.id].x, y: positions[group.id].y + devOpsBaseY }, sizes[group.id], view)),
-    serviceNode("live-app", "Live Application", analysis.signals.react ? "React" : analysis.signals.nginx ? "Nginx" : "Custom Application", { x: positions["live-app"].x, y: positions["live-app"].y + devOpsBaseY }, "devopsService"),
+    ...devOpsGroups.map((group) => groupNode(group, { x: positions[group.id].x, y: positions[group.id].y + devOpsBaseY }, sizes[group.id]!, view)),
   ];
 
   if (view === "detailed") groups.forEach((group) => addGroupChildren(nodes, group));
 
-  const user = groups[0].children;
-  const pipeline = groups[1].children;
-  const infrastructure = groups[2].children;
-  const cluster = groups[3].children;
+  const groupChildren = (id: GroupId) => groups.find((group) => group.id === id)?.children ?? [];
+  const user = groupChildren("user-path");
+  const pipeline = groupChildren("cicd");
+  const infrastructure = groupChildren("infrastructure");
+  const cluster = groupChildren("cluster");
   const knownNodeIds = new Set(nodes.map((node) => node.id));
-  const userStart = findFlowEndpoint(user, "first", "user-path");
-  const userEnd = findFlowEndpoint(user, "last", "user-path");
-  const pipelineStart = findFlowEndpoint(pipeline, "first", "cicd");
-  const pipelineEnd = findFlowEndpoint(pipeline, "last", "cicd");
-  const infraStart = findFlowEndpoint(infrastructure, "first", "infrastructure");
-  const infraEnd = findFlowEndpoint(infrastructure, "last", "infrastructure");
-  const clusterStart = findFlowEndpoint(cluster, "first", "cluster");
-  const clusterEnd = findFlowEndpoint(cluster, "last", "cluster");
 
   if (view === "high") {
-    return {
-      nodes,
-      edges: [
-        makeEdge("user-high-cluster", "user-path", "cluster", "HTTPS", "traffic"),
-        makeEdge("cluster-high-live", "cluster", "live-app", "Serve", "traffic"),
-        makeEdge("repo-high-cicd", "repository", "cicd", "Push", "deployment"),
-        makeEdge("cicd-high-infra", "cicd", "infrastructure", "Provision", "deployment"),
-        makeEdge("infra-high-cluster", "infrastructure", "cluster", "Deploy", "deployment"),
-      ],
-    };
+    return { nodes, edges: [] };
   }
 
-  const edges: ArchitectureEdge[] = [
-    ...orderEdges(user, "user-flow", "traffic", "HTTPS"),
-    ...orderEdges(pipeline, "pipeline-flow", "deployment", "Publish"),
-    ...orderEdges(infrastructure, "infra-flow", "deployment", "Provision"),
-    ...orderEdges(cluster, "cluster-flow", "deployment", "Runtime"),
-    makeEdge("repo-to-pipeline", "repository", pipelineStart, "Push", "deployment"),
-    makeEdge("pipeline-to-infra", pipelineEnd, infraStart, "Provision", "deployment"),
-    makeEdge("infra-to-cluster", infraEnd, clusterStart, "Deploy", "deployment"),
-    makeEdge("cluster-to-live", clusterEnd, "live-app", "Serve", "traffic"),
-    makeEdge("user-to-live", userEnd, "live-app", "Open application", "traffic"),
-  ];
+  const edges: ArchitectureEdge[] = [];
 
   for (const relation of analysis.relations) {
-    if (knownNodeIds.has(relation.source) && knownNodeIds.has(relation.target)) edges.push(makeEdge(`extracted-${relation.id}`, relation.source, relation.target, relation.label, relation.kind));
+    if (knownNodeIds.has(relation.source) && knownNodeIds.has(relation.target) && relation.evidence) edges.push(makeEdge(`extracted-${relation.id}`, relation.source, relation.target, relation.label, relation.kind, relation.evidence));
   }
 
   return { nodes, edges: Array.from(new Map(edges.map((edge) => [edge.id, edge])).values()) };

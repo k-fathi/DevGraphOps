@@ -1,5 +1,5 @@
 /**
- * ArchTrace visual system: resolve precise DevOps marks from the uploaded local catalog first,
+ * Repogram visual system: resolve precise DevOps marks from the uploaded local catalog first,
  * then simple-icons; never substitute a generic vendor icon before both paths are exhausted.
  */
 import * as simpleIcons from "simple-icons";

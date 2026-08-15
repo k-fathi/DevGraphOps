@@ -1,4 +1,4 @@
-/** ArchTrace app shell: dark operational theme with a focused, single-canvas experience. */
+/** Repogram app shell: dark operational theme with a focused, single-canvas experience. */
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 
 function Router() {
+  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path="/" component={Home} />
