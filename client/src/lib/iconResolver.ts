@@ -16,6 +16,7 @@ export type IconResolution =
 
 const localIconAssets: Record<string, string> = {
   github: "/manus-storage/github_c291de21.svg",
+  "github container registry": "/manus-storage/github_c291de21.svg",
   "github actions": "/manus-storage/githubactions-svgrepo-com_84d2850e.svg",
   sonarqube: "/manus-storage/sonarqube_5f6826c6.svg",
   nexus: "/manus-storage/nexus_94a24465.svg",
@@ -44,6 +45,11 @@ const localIconAssets: Record<string, string> = {
   configmap: "/manus-storage/k8s-configmap_dfbdecb1.svg",
   secret: "/manus-storage/k8s-secret_81e4e27e.svg",
   persistentvolumeclaim: "/manus-storage/k8s-persistentvolumeclaim_e16fab8c.svg",
+  gitleaks: "/manus-storage/gitleaks_3fa28bc0.png",
+  tfsec: "/manus-storage/tfsec_ec881b9c.png",
+  semgrep: "/manus-storage/semgrep_785025d7.png",
+  "retire.js": "/manus-storage/retirejs_f7c6d6d1.jpg",
+  njsscan: "/manus-storage/njsscan_7de285d4.png",
 };
 
 const simpleIconNames: Record<string, string> = {
@@ -53,6 +59,13 @@ const simpleIconNames: Record<string, string> = {
   mongodb: "siMongodb",
   digitalocean: "siDigitalocean",
   bitbucket: "siBitbucket",
+  "node.js": "siNodedotjs",
+  npm: "siNpm",
+  eslint: "siEslint",
+  python: "siPython",
+  trivy: "siTrivy",
+  "alpine linux": "siAlpinelinux",
+  git: "siGit",
 };
 
 function makeSvgDataUri(path: string, hex: string, title: string) {

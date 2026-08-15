@@ -78,6 +78,61 @@ describe("parsePublicRepositoryUrl", () => {
     expect(parsed.relations.map((relation) => relation.label)).toEqual(expect.arrayContaining(["Open application", "HTTPS", "Selects"]));
   });
 
+  it("extracts evidenced GitLab pipeline tools and stage-order arrows", () => {
+    const parsed = parseKubernetes([{ path: ".gitlab-ci.yml", content: `stages: [install, build, security_scan]
+install_app:
+  stage: install
+  image: node:20
+  script: ["npm install"]
+build_image:
+  stage: build
+  image: docker:25
+  script: ["docker build -t app .", "docker login $NEXUS_REGISTRY", "docker push $NEXUS_REGISTRY/app"]
+security_scan:
+  stage: security_scan
+  image: python:3.11
+  script: ["trivy image app", "gitleaks detect", "semgrep ci", "tfsec .", "retire"]
+` }]);
+    const tools = parsed.pipelineStages.flatMap((component) => component.tools ?? []);
+
+    expect(tools).toEqual(expect.arrayContaining(["Node.js", "npm", "Docker", "Nexus", "Trivy", "Gitleaks", "Semgrep", "tfsec", "Retire.js", "Python"]));
+    expect(parsed.pipelineRelations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "stage order", evidence: ".gitlab-ci.yml" }),
+    ]));
+  });
+
+  it("extracts GitHub Actions tools as icon-bearing nodes with sourced arrows", () => {
+    const parsed = parseKubernetes([{ path: ".github/workflows/ci.yml", content: `name: CI
+env:
+  REGISTRY: ghcr.io
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npm install && npx eslint .
+      - uses: docker/login-action@v3
+      - uses: docker/build-push-action@v6
+  security:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: gitleaks/gitleaks-action@v2
+      - run: pip3 install njsscan && njsscan backend
+      - uses: semgrep/semgrep-action@v1
+      - uses: aquasecurity/tfsec-action@v1
+      - run: npm install -g retire && retire
+` }]);
+    const tools = parsed.pipelineStages.flatMap((component) => component.tools ?? []);
+
+    expect(tools).toEqual(expect.arrayContaining(["Git", "Node.js", "npm", "ESLint", "Docker", "GitHub Container Registry", "Trivy", "Gitleaks", "NJSScan", "Semgrep", "tfsec", "Retire.js", "Python"]));
+    expect(parsed.pipelineRelations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "github-needs-build-security", label: "needs", evidence: ".github/workflows/ci.yml" }),
+    ]));
+  });
+
   it("does not render empty evidence domains", async () => {
     const analysis = {
       repository: { provider: "github" as const, owner: "acme", repo: "ingress", branch: "main", url: "https://github.com/acme/ingress" },

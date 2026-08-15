@@ -86,3 +86,23 @@
 - [x] Validate one real GitHub repository that shows its declared user entry and dense DevOps evidence in the same final diagram.
 
 - [x] Prioritize related Kubernetes Ingress, Service, and workload manifests when selecting files from large repositories.
+
+## DEPI-GP Repository Analysis Fix
+
+- [x] Inspect `github.com/k-fathi/DEPI-GP` for actual Docker, registry, OWASP, CI, and deployment evidence that should be visualized.
+- [x] Render relation arrows and tool icons for every evidenced DEPI-GP pipeline stage without reintroducing inferred tools.
+- [x] Verify the DEPI-GP diagram and add regression coverage for its discovered file patterns.
+
+## Per-Stage Tool Icon and Arrow Refinement
+
+- [x] Extract each evidenced CI/CD tool or technology used inside a DEPI-GP pipeline stage and render it as an icon-bearing node.
+- [x] Render a direct in-card stage-to-tool arrow treatment for sourced tool icons without recreating the old cluttered graph links.
+- [x] Verify the DEPI-GP pipeline visually for Docker, Docker Hub, security scanners, registry, and deployment tool icons where files provide evidence.
+
+## Pipeline Stage Card Layout
+
+- [x] Keep each evidenced CI job as one stage card with its evidenced tool icons displayed inside the card.
+- [x] Limit arrows in the primary diagram to declared job dependencies and stage order, while retaining tool evidence inside the source stage card.
+- [x] Verify the compact DEPI-GP pipeline layout is readable with visible directional arrows.
+
+- [x] Verify in the live DEPI-GP diagram that build jobs display GitHub Container Registry for `ghcr.io` and omit Docker Hub unless separately evidenced.

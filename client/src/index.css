@@ -151,6 +151,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
 .architecture-node__evidence { max-width: 108px; overflow: hidden; color: #b0b0b0; font: 500 8px/1 "IBM Plex Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
 .architecture-node__icon { width: 44px; height: 44px; object-fit: contain; filter: saturate(0.82) contrast(0.98); }
 .architecture-node__label { max-width: 112px; color: #ededed; font-size: 11px; line-height: 1.22; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
+.architecture-node__tools { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; max-width: 104px; min-height: 18px; }
+.architecture-node__tool-link { position: relative; display: inline-flex; padding-left: 5px; }
+.architecture-node__tool-link::before { content: "↗"; position: absolute; left: -1px; top: 4px; z-index: 1; color: #b7d45c; font: 700 8px/1 "IBM Plex Mono", monospace; }
+.architecture-node__tool-icon, .architecture-node__tool-missing { width: 17px; height: 17px; box-sizing: border-box; border: 1px solid #4c4c4c; border-radius: 3px; object-fit: contain; background: #202020; }
+.architecture-node__tool-missing { display: inline-grid; place-items: center; color: #e8c65e; font: 700 7px/1 "IBM Plex Mono", monospace; letter-spacing: -0.04em; }
 .architecture-node__missing { position: relative; display: grid; place-items: center; width: 44px; height: 44px; color: #f09238; border: 1px dashed #bb6a29; background: rgba(180, 89, 30, 0.12); }
 .architecture-node__missing-mark { position: absolute; right: 3px; bottom: 3px; color: #e09a56; }
 .architecture-handle { width: 6px !important; height: 6px !important; border: 1px solid #101010 !important; border-radius: 0 !important; background: #7d7d7d !important; opacity: 0; }

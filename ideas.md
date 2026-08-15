@@ -168,3 +168,17 @@ The normal architecture overview after tracing retains separate wide domain boxe
 Final clean-screenshot QA of `GoogleCloudPlatform/microservices-demo` confirms the rendered full path visually: the End User group is isolated above the workspace, its declared traffic line travels through empty canvas to the frontend-external Service, and the short service-to-workload edges remain contained inside the runtime box. Build/delivery, infrastructure, and runtime domains use separate wide boxes, with no empty monitoring lane or cross-domain fabricated arrow.
 
 Objective final-layout QA queried the rendered React Flow canvas directly: all 32 service and workflow node bounding boxes were measured, and the overlap set was empty (`nodeCount: 32`, `overlaps: []`). This supplements the clean screenshot review with a deterministic verification that cards do not sit on top of each other.
+
+DEPI-GP pipeline evidence from `.gitlab-ci.yml` includes Node.js install/test/lint, Terraform validation, Docker build with Docker-in-Docker, Nexus Registry login/push, Trivy, Gitleaks, NJSScan, Semgrep, tfsec, Retire.js, npm audit, and Kubernetes-manifest updates. The file does not contain an OWASP Dependency-Check invocation, so an OWASP icon must not be invented; npm audit may be shown as its evidenced dependency-scan tool instead.
+
+The first DEPI-GP rendering confirms sourced arrows and GitLab tool nodes are now extracted, but its dominant `.github/workflows/ci-cd.yml` job nodes still need per-job tool extraction. The next fix must read GitHub Action steps as well, then place tools beside their source job rather than allowing the pipeline group to become one undifferentiated long grid.
+
+The DEPI-GP GitHub Actions workflow directly declares `actions/checkout`, `actions/setup-node`, `npm install`, `gitleaks/gitleaks-action`, `pip3 install njsscan`, `njsscan`, and `aquasecurity/tfsec-action`. These tool references are authoritative sources for per-job tool nodes and directed `uses` arrows in the GitHub Actions branch of the parser.
+
+DEPI-GP now renders each CI job as a stage card with its sourced tool icons inside the card. A direct DOM check confirmed all 46 visible relationship paths carry closed arrow markers (`edgeCount: 46`, `arrowMarkedEdges: 46`), using the brighter deployment route color above the group surfaces.
+
+The final DEPI-GP DOM check measured 46 non-container stage/service cards with no overlaps, 77 embedded resolved tool icons, zero unresolved tool badges, and 46/46 edge paths carrying closed arrowheads. This validates the compact stage-card approach instead of the previous separate, overflowing tool-node grid.
+
+The DEPI-GP workflow declares `REGISTRY: ghcr.io`, so the corrected representation is GitHub Container Registry rather than Docker Hub. A fresh in-app analysis attempt after this parser change encountered the public GitHub API rate limit; automated extraction coverage passed locally and the earlier live DEPI-GP rendering remains the visual evidence for the stage-card and arrow presentation.
+
+Live re-analysis later completed successfully. The rendered DEPI-GP DOM confirms three `GitHub Container Registry` tool icons in Docker build stages, zero `Docker Hub` tool icons, 80 in-card tool arrows, and 46 graph edge arrowheads. The diagram therefore reflects the repository's declared `ghcr.io` registry rather than inventing Docker Hub.

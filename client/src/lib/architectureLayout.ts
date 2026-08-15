@@ -3,7 +3,7 @@
  * ELK lays out the DevOps delivery path while a parallel user lane converges only at the production app.
  */
 import ELK from "elkjs/lib/elk.bundled.js";
-import type { Edge, Node } from "@xyflow/react";
+import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import type { ArchitectureDomain, ExtractedComponent, RelationKind, RepositoryAnalysis } from "@/lib/repositoryParser";
 import type { ContainerNodeData, ServiceNodeData } from "@/components/architecture/nodes";
 
@@ -16,7 +16,7 @@ export type JourneyDefinition = { id: Exclude<JourneyMode, "overview">; title: s
 
 const elk = new ELK();
 const LEAF_WIDTH = 128;
-const LEAF_HEIGHT = 124;
+const LEAF_HEIGHT = 154;
 const CHILD_GAP = 34;
 
 type GroupId = "user-path" | "cicd" | "infrastructure" | "cluster";
@@ -35,8 +35,8 @@ function iconForProvider(provider: RepositoryAnalysis["repository"]["provider"])
   return provider === "github" ? "GitHub" : provider === "gitlab" ? "GitLab" : "Bitbucket";
 }
 
-function serviceNode(id: string, label: string, icon: string, position: { x: number; y: number }, type: "pipelineStep" | "devopsService" = "devopsService", evidence?: string): ArchitectureNode {
-  return { id, type, position, draggable: false, selectable: false, data: { label, icon, evidence }, style: { width: LEAF_WIDTH, height: LEAF_HEIGHT } };
+function serviceNode(id: string, label: string, icon: string, position: { x: number; y: number }, type: "pipelineStep" | "devopsService" = "devopsService", evidence?: string, tools?: string[]): ArchitectureNode {
+  return { id, type, position, draggable: false, selectable: false, data: { label, icon, evidence, tools }, style: { width: LEAF_WIDTH, height: LEAF_HEIGHT } };
 }
 
 function groupNode(definition: GroupDefinition, position: { x: number; y: number }, size: Size, view: ArchitectureView): ArchitectureNode {
@@ -55,13 +55,14 @@ function groupNode(definition: GroupDefinition, position: { x: number; y: number
 function makeEdge(id: string, source: string, target: string, label: string, kind: RelationKind, evidence?: string): ArchitectureEdge {
   const styleByKind: Record<RelationKind, { stroke: string; strokeWidth: number; strokeDasharray?: string; animated: boolean }> = {
     traffic: { stroke: "#4f9938", strokeWidth: 2.1, strokeDasharray: "8 6", animated: false },
-    deployment: { stroke: "#769b36", strokeWidth: 1.8, strokeDasharray: "7 5", animated: false },
+    deployment: { stroke: "#9abb45", strokeWidth: 2.35, strokeDasharray: "7 5", animated: false },
     observability: { stroke: "#f08b2b", strokeWidth: 1.65, strokeDasharray: "3 5", animated: false },
     dependency: { stroke: "#707070", strokeWidth: 1.35, strokeDasharray: "2 4", animated: false },
   };
   const style = styleByKind[kind];
   return {
-    id, source, target, type: "step", animated: style.animated, label, data: { kind, evidence }, selectable: false,
+    id, source, target, type: "step", animated: style.animated, label, data: { kind, evidence }, selectable: false, zIndex: 2,
+    markerEnd: { type: MarkerType.ArrowClosed, color: style.stroke, width: 18, height: 18 },
     style: { stroke: style.stroke, strokeWidth: style.strokeWidth, strokeDasharray: style.strokeDasharray },
     labelStyle: { fill: "#d8d8d8", fontSize: 10, fontWeight: 600 }, labelBgStyle: { fill: "#171717", fillOpacity: 0.96 }, labelBgPadding: [5, 3], labelBgBorderRadius: 2,
   };
@@ -107,7 +108,7 @@ function addGroupChildren(nodes: ArchitectureNode[], group: GroupDefinition) {
     const column = index % columns;
     const row = Math.floor(index / columns);
     nodes.push({
-      ...serviceNode(child.id, child.label, child.icon, { x: 30 + column * (LEAF_WIDTH + CHILD_GAP), y: 58 + row * (LEAF_HEIGHT + CHILD_GAP) }, child.domain === "pipeline" ? "pipelineStep" : "devopsService", child.evidence),
+      ...serviceNode(child.id, child.label, child.icon, { x: 30 + column * (LEAF_WIDTH + CHILD_GAP), y: 58 + row * (LEAF_HEIGHT + CHILD_GAP) }, child.domain === "pipeline" ? "pipelineStep" : "devopsService", child.evidence, child.tools),
       parentId: group.id, extent: "parent", zIndex: 3,
     });
   });

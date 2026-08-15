@@ -47,6 +47,7 @@ export type ExtractedComponent = {
   icon: string;
   domain: ArchitectureDomain;
   evidence?: string;
+  tools?: string[];
 };
 
 export type ArchitectureRelation = {
@@ -116,6 +117,62 @@ function referencedNames(value: unknown): string[] {
   if (typeof value === "string") return [value];
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => typeof item === "string" ? [item] : [asString(asRecord(item)?.job)]).filter(Boolean);
+}
+
+function scriptLines(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(scriptLines);
+}
+
+function gitLabToolLabels(job: JsonRecord): string[] {
+  const image = job.image;
+  const imageName = typeof image === "string" ? image : asString(asRecord(image)?.name);
+  const source = [imageName, ...scriptLines(job.before_script), ...scriptLines(job.script)].join("\n").toLowerCase();
+  const tools: Array<[string, RegExp]> = [
+    ["Node.js", /\bnode(?::|\b)|npm\s/],
+    ["npm", /\bnpm\s/],
+    ["ESLint", /\beslint\b/],
+    ["Terraform", /hashicorp\/terraform|\bterraform\b/],
+    ["Docker", /\bdocker\b/],
+    ["Nexus", /nexus[_-]?registry|\bnexus\b/],
+    ["Trivy", /\btrivy\b/],
+    ["Gitleaks", /\bgitleaks\b/],
+    ["NJSScan", /\bnjsscan\b/],
+    ["Semgrep", /\bsemgrep\b/],
+    ["tfsec", /\btfsec\b/],
+    ["Retire.js", /\bretire\b/],
+    ["Python", /python(?::|\b)|pip3?\s/],
+    ["Alpine Linux", /\balpine(?::|\b)|\bapk\s/],
+    ["Git", /\bgit\s/],
+    ["Kubernetes", /\bk8s\//],
+  ];
+  return tools.filter(([, pattern]) => pattern.test(source)).map(([label]) => label);
+}
+
+function githubWorkflowToolLabels(job: JsonRecord, workflowHasGhcr: boolean): string[] {
+  const steps = Array.isArray(job.steps) ? job.steps.map(asRecord).filter((step): step is JsonRecord => Boolean(step)) : [];
+  const source = steps.map((step) => [asString(step.name), asString(step.uses), ...scriptLines(step.run)].join("\n")).join("\n").toLowerCase();
+  const tools: Array<[string, RegExp]> = [
+    ["Git", /actions\/checkout|\bgit\s/],
+    ["Node.js", /actions\/setup-node|\bnode\b/],
+    ["npm", /\bnpm\s/],
+    ["ESLint", /\beslint\b/],
+    ["Terraform", /\bterraform\b/],
+    ["Docker", /docker\/(login|build-push)-action|\bdocker\b/],
+    ["Docker Hub", /docker\.io|index\.docker\.io|hub\.docker\.com/],
+    ["Nexus", /nexus[_-]?registry|\bnexus\b/],
+    ["Trivy", /\btrivy\b/],
+    ["Gitleaks", /\bgitleaks\b/],
+    ["NJSScan", /\bnjsscan\b/],
+    ["Semgrep", /\bsemgrep\b/],
+    ["tfsec", /\btfsec\b/],
+    ["Retire.js", /\bretire\b/],
+    ["Python", /python(?::|\b)|pip3?\s/],
+    ["Kubernetes", /\bk8s\//],
+  ];
+  const detected = tools.filter(([, pattern]) => pattern.test(source)).map(([label]) => label);
+  return workflowHasGhcr && detected.includes("Docker") ? [...detected, "GitHub Container Registry"] : detected;
 }
 
 function slug(value: string) {
@@ -433,27 +490,41 @@ export function parseKubernetes(files: ContentFile[]) {
 
     const lowerPath = file.path.toLowerCase();
     if (lowerPath === ".gitlab-ci.yml") {
+      const jobNodes: Array<{ id: string; stage: string }> = [];
+      const stageOrder: string[] = [];
       for (const value of values) {
         const record = asRecord(value);
         if (!record) continue;
+        if (Array.isArray(record.stages)) stageOrder.push(...record.stages.filter((stage): stage is string => typeof stage === "string"));
         for (const [name, candidate] of Object.entries(record)) {
           const job = asRecord(candidate);
           const stage = asString(job?.stage);
           if (stage) {
             const id = `gitlab-stage-${slug(name)}`;
-            pipelineStages.push({ id, label: `${stage}: ${name}`, icon: "GitLab", domain: "pipeline", evidence: file.path });
+            pipelineStages.push({ id, label: `${stage}: ${name}`, icon: "GitLab", domain: "pipeline", evidence: file.path, tools: job ? gitLabToolLabels(job) : [] });
+            jobNodes.push({ id, stage });
             referencedNames(job?.needs).forEach((dependency) => pipelineRelations.push({ id: `gitlab-needs-${slug(dependency)}-${slug(name)}`, source: `gitlab-stage-${slug(dependency)}`, target: id, label: "needs", kind: "deployment", evidence: file.path }));
           }
         }
       }
+      const jobsByStage = new Map<string, string[]>();
+      jobNodes.forEach((job) => jobsByStage.set(job.stage, [...(jobsByStage.get(job.stage) ?? []), job.id]));
+      stageOrder.forEach((stage, index) => {
+        if (index === 0) return;
+        const previous = jobsByStage.get(stageOrder[index - 1]) ?? [];
+        const current = jobsByStage.get(stage) ?? [];
+        previous.forEach((source) => current.forEach((target) => pipelineRelations.push({ id: `gitlab-stage-order-${source}-${target}`, source, target, label: "stage order", kind: "deployment", evidence: file.path })));
+      });
     }
     if (lowerPath.startsWith(".github/workflows/")) {
       const root = values.map((value) => asRecord(value)).find((value): value is JsonRecord => Boolean(value));
       const jobs = asRecord(root?.["jobs"]);
+      const workflowHasGhcr = /ghcr\.io/i.test(JSON.stringify(root ?? {}));
       for (const [name, candidate] of Object.entries(jobs ?? {})) {
         const id = `github-job-${slug(name)}`;
-        pipelineStages.push({ id, label: `Job: ${name}`, icon: "GitHub Actions", domain: "pipeline", evidence: file.path });
-        referencedNames(asRecord(candidate)?.needs).forEach((dependency) => pipelineRelations.push({ id: `github-needs-${slug(dependency)}-${slug(name)}`, source: `github-job-${slug(dependency)}`, target: id, label: "needs", kind: "deployment", evidence: file.path }));
+        const job = asRecord(candidate);
+        pipelineStages.push({ id, label: `Job: ${name}`, icon: "GitHub Actions", domain: "pipeline", evidence: file.path, tools: job ? githubWorkflowToolLabels(job, workflowHasGhcr) : [] });
+        referencedNames(job?.needs).forEach((dependency) => pipelineRelations.push({ id: `github-needs-${slug(dependency)}-${slug(name)}`, source: `github-job-${slug(dependency)}`, target: id, label: "needs", kind: "deployment", evidence: file.path }));
       }
     }
     if (/docker-compose/i.test(lowerPath)) {
@@ -564,7 +635,7 @@ export async function analyzePublicRepository(rawUrl: string): Promise<Repositor
   signals.dockerHub = yaml.dockerHubDetected;
   signals.kubernetes ||= yaml.components.some((component) => component.icon !== "Docker Compose");
 
-  const components = uniqueById([...buildBaseComponents(), ...pipelineDetails.components.slice(0, 8), ...yaml.pipelineStages.slice(0, 8), ...terraform.components.slice(0, 10), ...yaml.components.slice(0, 14)]);
+  const components = uniqueById([...buildBaseComponents(), ...pipelineDetails.components.slice(0, 12), ...yaml.pipelineStages.slice(0, 88), ...terraform.components.slice(0, 10), ...yaml.components.slice(0, 14)]);
   const relations = uniqueRelations([...pipelineDetails.relations, ...yaml.pipelineRelations, ...terraform.relations, ...yaml.relations]);
 
   return {
