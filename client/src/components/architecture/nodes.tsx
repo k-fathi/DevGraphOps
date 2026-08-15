@@ -1,6 +1,6 @@
 /**
- * ArchTrace node visuals: muted dark engineering surfaces, compact icon-led cards,
- * and restrained dashed domain boundaries with no dashboard-like UI inside the canvas.
+ * Visual direction: charcoal service cards on a technical board, surrounded by restrained dashed groups.
+ * The palette relies on functional green, olive, amber, and pink accents rather than blue or neon effects.
  */
 import { CircleAlert, ExternalLink } from "lucide-react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";

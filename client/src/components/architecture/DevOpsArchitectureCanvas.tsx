@@ -1,6 +1,6 @@
 /**
- * ArchTrace workspace: a restrained draw.io-inspired canvas where repository analysis,
- * view switching, and ELK relayout are the primary interactions.
+ * Visual direction: off-black diagram workspace with charcoal controls, dashed green routing,
+ * and limited olive, amber, and pink functional signals in place of blue or neon accents.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, Download, FileImage, FileType2, GitBranch, LoaderCircle, ScanSearch, Sparkles } from "lucide-react";
@@ -89,7 +89,7 @@ export default function DevOpsArchitectureCanvas() {
     setError("");
     try {
       const options = {
-        backgroundColor: "#0b1018",
+        backgroundColor: "#101010",
         cacheBust: true,
         pixelRatio: format === "png" ? 2 : 1,
         filter: (node: HTMLElement) => !node.classList?.contains("react-flow__controls") && !node.classList?.contains("canvas-legend") && !node.classList?.contains("canvas-note"),
@@ -165,7 +165,7 @@ export default function DevOpsArchitectureCanvas() {
           panOnDrag
           proOptions={{ hideAttribution: true }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1.1} color="#1e293b" />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1.1} color="#2d2d2d" />
           <Controls position="bottom-right" showInteractive={false} />
         </ReactFlow>
         <div className="canvas-legend" aria-label="Flow legend">

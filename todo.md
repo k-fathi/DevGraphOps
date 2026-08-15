@@ -30,3 +30,9 @@
 
 - [x] Convert all interface copy, state messages, controls, and route guidance to English.
 - [x] Verify visually and through a source scan that no Arabic text remains in the user-facing product experience.
+
+## Reference Color System
+
+- [x] Replace bright blue and neon accents with the charcoal, green-route, pink, amber, and olive visual language from the provided references.
+- [x] Restyle group boundaries, nodes, edges, controls, and legends to use restrained contrast and dashed green operational paths.
+- [x] Verify visual contrast and diagram readability against the supplied reference aesthetic.

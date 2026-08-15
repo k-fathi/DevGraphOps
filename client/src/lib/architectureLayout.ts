@@ -1,6 +1,6 @@
 /**
- * ArchTrace layout system: ELK lays out the DevOps delivery path while a parallel, upper user lane
- * remains visually separate. Both lanes converge only at the production application and never overlap.
+ * ArchTrace layout system: a charcoal technical-board composition with quiet, dashed functional routes.
+ * ELK lays out the DevOps delivery path while a parallel user lane converges only at the production app.
  */
 import ELK from "elkjs/lib/elk.bundled.js";
 import type { Edge, Node } from "@xyflow/react";
@@ -50,16 +50,16 @@ function groupNode(definition: GroupDefinition, position: { x: number; y: number
 
 function makeEdge(id: string, source: string, target: string, label: string, kind: RelationKind): ArchitectureEdge {
   const styleByKind: Record<RelationKind, { stroke: string; strokeWidth: number; strokeDasharray?: string; animated: boolean }> = {
-    traffic: { stroke: "#22c55e", strokeWidth: 2.3, animated: false },
-    deployment: { stroke: "#60a5fa", strokeWidth: 1.9, strokeDasharray: "7 5", animated: true },
-    observability: { stroke: "#f59e0b", strokeWidth: 1.7, strokeDasharray: "3 5", animated: false },
-    dependency: { stroke: "#94a3b8", strokeWidth: 1.45, strokeDasharray: "2 4", animated: false },
+    traffic: { stroke: "#4f9938", strokeWidth: 2.1, strokeDasharray: "8 6", animated: false },
+    deployment: { stroke: "#769b36", strokeWidth: 1.8, strokeDasharray: "7 5", animated: false },
+    observability: { stroke: "#f08b2b", strokeWidth: 1.65, strokeDasharray: "3 5", animated: false },
+    dependency: { stroke: "#707070", strokeWidth: 1.35, strokeDasharray: "2 4", animated: false },
   };
   const style = styleByKind[kind];
   return {
     id, source, target, type: "step", animated: style.animated, label, data: { kind }, selectable: false,
     style: { stroke: style.stroke, strokeWidth: style.strokeWidth, strokeDasharray: style.strokeDasharray },
-    labelStyle: { fill: "#cbd5e1", fontSize: 10, fontWeight: 600 }, labelBgStyle: { fill: "#111827", fillOpacity: 0.96 }, labelBgPadding: [5, 3], labelBgBorderRadius: 2,
+    labelStyle: { fill: "#d8d8d8", fontSize: 10, fontWeight: 600 }, labelBgStyle: { fill: "#171717", fillOpacity: 0.96 }, labelBgPadding: [5, 3], labelBgBorderRadius: 2,
   };
 }
 
@@ -67,10 +67,10 @@ function createGroups(analysis: RepositoryAnalysis): GroupDefinition[] {
   const byDomain = (domain: ArchitectureDomain) => analysis.components.filter((component) => component.domain === domain);
   const fallback = (domain: ArchitectureDomain, id: string, label: string, icon: string): ExtractedComponent[] => [{ id, label, icon, domain }];
   return [
-    { id: "user-path", label: "A · USER JOURNEY · LIVE PATH", color: "#22c55e", children: byDomain("user").length ? byDomain("user") : fallback("user", "user-missing", "User access", "Users") },
-    { id: "cicd", label: "B · DEVOPS · BUILD & DELIVERY", color: "#8b5cf6", children: byDomain("pipeline").length ? byDomain("pipeline") : fallback("pipeline", "pipeline-missing", "Pipeline config", "CI Pipeline") },
-    { id: "infrastructure", label: "C · DEVOPS · INFRASTRUCTURE", color: "#f59e0b", children: byDomain("infrastructure").length ? byDomain("infrastructure") : fallback("infrastructure", "infra-missing", "Infrastructure config", "Custom Cloud Service") },
-    { id: "cluster", label: "D · DEVOPS · RUNTIME & OBSERVABILITY", color: "#38bdf8", children: byDomain("cluster").length ? byDomain("cluster") : fallback("cluster", "cluster-missing", "Runtime config", "ConfigMap") },
+    { id: "user-path", label: "A · USER JOURNEY · LIVE PATH", color: "#4f9938", children: byDomain("user").length ? byDomain("user") : fallback("user", "user-missing", "User access", "Users") },
+    { id: "cicd", label: "B · DEVOPS · BUILD & DELIVERY", color: "#7d9d36", children: byDomain("pipeline").length ? byDomain("pipeline") : fallback("pipeline", "pipeline-missing", "Pipeline config", "CI Pipeline") },
+    { id: "infrastructure", label: "C · DEVOPS · INFRASTRUCTURE", color: "#f08b2b", children: byDomain("infrastructure").length ? byDomain("infrastructure") : fallback("infrastructure", "infra-missing", "Infrastructure config", "Custom Cloud Service") },
+    { id: "cluster", label: "D · DEVOPS · RUNTIME & OBSERVABILITY", color: "#df77b7", children: byDomain("cluster").length ? byDomain("cluster") : fallback("cluster", "cluster-missing", "Runtime config", "ConfigMap") },
   ];
 }
 
