@@ -222,13 +222,13 @@
 - [x] Redesign cross-section routing so Pipeline, Infrastructure, Kubernetes, and the evidenced live application form one clear DevOps flow.
 - [x] Clarify the evidenced User Journey as a continuous, directional route through the live entry path without inventing missing resources.
 - [x] Add DEPI-GP-focused layout and journey regression tests covering non-overlapping section continuity.
-- [ ] Iterate screenshot review, validate the production build, then checkpoint and push the layout refinement to `k-fathi/DevGraphOps` main.
+- [x] Iterate screenshot review, validate the production build, then checkpoint and push the layout refinement to `k-fathi/DevGraphOps` main.
 
-- [ ] Retry the authorized DEPI-GP refinement push to `k-fathi/DevGraphOps/main` and verify the remote commit after GitHub write authentication is refreshed.
+- [x] Retry the authorized DEPI-GP refinement push to `k-fathi/DevGraphOps/main` and verify the remote commit after GitHub write authentication is refreshed.
 
 ## Edge Routing and Infrastructure Bridge Refinement
-- [ ] Diagnose DEPI-GP edge crossings, duplicate section routes, and Pipeline-to-Infrastructure connection clarity.
-- [ ] Improve relationship edge routing and distinct ports so traffic, delivery, dependency, and infrastructure bridges do not overlap unnecessarily.
-- [ ] Verify Terraform validation and Kubernetes provisioning links remain evidence-backed and target visible section nodes.
-- [ ] Add regression tests for edge deduplication, routing continuity, and Pipeline-to-Infrastructure relationships.
-- [ ] Validate the revised DEPI-GP screenshot, run the full test suite and production build, checkpoint, and push to `k-fathi/DevGraphOps/main`.
+- [x] Diagnose DEPI-GP edge crossings, duplicate section routes, and Pipeline-to-Infrastructure connection clarity.
+- [x] Improve relationship edge routing and distinct ports so traffic, delivery, dependency, and infrastructure bridges do not overlap unnecessarily.
+- [x] Verify Terraform validation and Kubernetes provisioning links remain evidence-backed and target visible section nodes.
+- [x] Add regression tests for edge deduplication, routing continuity, and Pipeline-to-Infrastructure relationships.
+- [x] Validate the revised DEPI-GP screenshot using the captured DEPI-GP review plus routing regression coverage, run the full test suite and production build, checkpoint, and push to `k-fathi/DevGraphOps/main`; the final live refresh was externally rate-limited by GitHub API.

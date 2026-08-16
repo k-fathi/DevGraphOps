@@ -29,7 +29,7 @@ export function ContainerGroupNode({ data }: NodeProps<ContainerNode>) {
   const resolution = data.providerIcon ? resolveIcon(data.providerIcon) : null;
   return <div className={`architecture-group ${data.collapsed ? "architecture-group--collapsed" : ""} ${data.isPipeline ? "architecture-group--pipeline" : ""} ${data.pipelineExpanded ? "architecture-group--pipeline-expanded" : ""} ${data.isCluster ? "architecture-group--cluster" : ""} ${data.clusterExpanded ? "architecture-group--cluster-expanded" : ""}`} style={{ "--group-color": data.color } as React.CSSProperties}>
     <Handle id="in" type="target" position={Position.Left} className="architecture-handle architecture-handle--group" />
-    {data.isCluster && <><Handle id="journey-in" type="target" position={Position.Top} className="architecture-handle architecture-handle--group architecture-handle--route" /><Handle id="delivery-in" type="target" position={Position.Bottom} className="architecture-handle architecture-handle--group architecture-handle--route" /></>}
+    {data.isCluster && <><Handle id="journey-in" type="target" position={Position.Top} className="architecture-handle architecture-handle--group architecture-handle--route" /><Handle id="delivery-in" type="target" position={Position.Bottom} className="architecture-handle architecture-handle--group architecture-handle--route" /><Handle id="provision-in" type="target" position={Position.Left} style={{ top: "70%" }} className="architecture-handle architecture-handle--group architecture-handle--route" /></>}
     <div className="architecture-group__label">{data.label}</div>
     {data.isPipeline && <div className="pipeline-summary">
       <div className="pipeline-summary__identity">{resolution?.kind === "image" && <img src={resolution.src} alt="" aria-hidden="true" />}<span>PIPELINE</span><strong>{data.childCount} sourced stages</strong></div>
@@ -46,7 +46,8 @@ export function ContainerGroupNode({ data }: NodeProps<ContainerNode>) {
       </button>
     </div>}
     {data.collapsed && !data.isPipeline && <div className="architecture-group__collapsed-count">{data.childCount || "–"}</div>}
-    {data.isPipeline && <Handle id="delivery-out" type="source" position={Position.Bottom} className="architecture-handle architecture-handle--group architecture-handle--route" />}
+    {data.isPipeline && <><Handle id="delivery-out" type="source" position={Position.Bottom} className="architecture-handle architecture-handle--group architecture-handle--route" /><Handle id="infrastructure-out" type="source" position={Position.Right} style={{ top: "70%" }} className="architecture-handle architecture-handle--group architecture-handle--route" /></>}
+    {data.label.includes("INFRASTRUCTURE") && <><Handle id="infrastructure-in" type="target" position={Position.Left} style={{ top: "70%" }} className="architecture-handle architecture-handle--group architecture-handle--route" /><Handle id="cluster-out" type="source" position={Position.Right} style={{ top: "70%" }} className="architecture-handle architecture-handle--group architecture-handle--route" /></>}
     <Handle id="out" type="source" position={Position.Right} className="architecture-handle architecture-handle--group" />
   </div>;
 }
@@ -55,6 +56,8 @@ export function DevopsServiceNode({ data }: NodeProps<ServiceNode>) {
   const statusLabel: Record<PipelineExecutionState, string> = { success: "Passed", running: "Running", failed: "Failed", queued: "Queued", neutral: "Not reported" };
   return <div className={`architecture-node ${data.journeyActive ? "architecture-node--journey-active" : ""} ${data.journeyDimmed ? "architecture-node--journey-dimmed" : ""} ${data.pipelineStage ? "architecture-node--pipeline-stage" : ""} ${data.pipelineStage?.closing ? "architecture-node--pipeline-exiting" : ""}`} title={data.evidence ? `${data.label} — evidence: ${data.evidence}` : data.label}>
     <Handle id="in" type="target" position={Position.Left} className="architecture-handle" />
+    <Handle id="traffic-in" type="target" position={Position.Top} className="architecture-handle architecture-handle--route" />
+    <Handle id="relation-in" type="target" position={Position.Top} style={{ left: "35%" }} className="architecture-handle architecture-handle--route" />
     {data.journeyNumber && <span className="architecture-node__sequence" aria-label={`Journey step ${data.journeyNumber}`}>{data.journeyNumber}</span>}
     {data.pipelineStage && <div className="pipeline-stage-badge"><span>{data.pipelineStage.phase}</span>{data.pipelineStage.parallel && <em>PARALLEL</em>}</div>}
     {data.kubernetesStage && <div className="kubernetes-stage-badge"><span>{data.kubernetesStage.layer}</span>{data.kubernetesStage.namespace && <em>{data.kubernetesStage.expanded ? "OPEN" : "EXPAND"}</em>}</div>}
@@ -64,6 +67,8 @@ export function DevopsServiceNode({ data }: NodeProps<ServiceNode>) {
     <div className="architecture-node__label">{data.label}</div>
     {data.tools?.length ? <div className="architecture-node__tools" aria-label={`Tools used by ${data.label}`}>{data.tools.map((tool) => <span className="architecture-node__tool-link" key={tool}><ToolIcon tool={tool} /></span>)}</div> : null}
     {data.evidence && <div className="architecture-node__evidence">{data.evidence.split("/").at(-1)}</div>}
+    <Handle id="traffic-out" type="source" position={Position.Bottom} className="architecture-handle architecture-handle--route" />
+    <Handle id="relation-out" type="source" position={Position.Bottom} style={{ left: "65%" }} className="architecture-handle architecture-handle--route" />
     <Handle id="out" type="source" position={Position.Right} className="architecture-handle" />
   </div>;
 }

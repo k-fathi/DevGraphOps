@@ -210,8 +210,9 @@ describe("DEPI-GP cross-section continuity", () => {
     const layout = await buildArchitectureLayout(analysis as any, "detailed", false, false, false);
     const bridgeEdges = new Map(layout.edges.map((edge) => [edge.label, edge]));
 
-    expect(bridgeEdges.get("validates infrastructure")).toMatchObject({ source: "cicd", target: "infrastructure" });
-    expect(bridgeEdges.get("provisions Kubernetes")).toMatchObject({ source: "infrastructure", target: "cluster" });
+    expect(bridgeEdges.get("validates infrastructure")).toMatchObject({ source: "cicd", target: "infrastructure", sourceHandle: "infrastructure-out", targetHandle: "infrastructure-in" });
+    expect(bridgeEdges.get("provisions Kubernetes")).toMatchObject({ source: "infrastructure", target: "cluster", sourceHandle: "cluster-out", targetHandle: "provision-in" });
+    expect(bridgeEdges.get("updates manifest")).toMatchObject({ sourceHandle: "delivery-out", targetHandle: "delivery-in" });
     expect(layout.edges.filter((edge) => edge.label === "updates manifest")).toHaveLength(1);
     const devOpsJourney = buildJourneyDefinitions(analysis as any, layout.nodes, layout.edges).find((journey) => journey.id === "devops")!;
     expect(devOpsJourney.steps.map((step) => step.label)).toEqual(expect.arrayContaining(["Pipeline · 1 declared stages", "Kubernetes Cluster"]));

@@ -203,10 +203,14 @@ function makeEdge(id: string, source: string, target: string, label: string, kin
   const style = styleByKind[kind];
   const isUserRoute = source === "user" && target === "cluster" && kind === "traffic";
   const isManifestShortcut = source === "cicd" && target === "cluster" && label === "updates manifest";
+  const isInfrastructureValidation = source === "cicd" && target === "infrastructure" && label === "validates infrastructure";
+  const isProvisioning = source === "infrastructure" && target === "cluster" && label === "provisions Kubernetes";
+  const isRuntimeTraffic = kind === "traffic" && !isUserRoute;
+  const isResourceRelation = kind === "dependency" && !isManifestShortcut && !isProvisioning;
   return {
     id, source, target, type: "step", animated: style.animated, label, data: { kind, evidence }, selectable: false, zIndex: 2,
-    sourceHandle: isManifestShortcut ? "delivery-out" : "out",
-    targetHandle: isUserRoute ? "journey-in" : isManifestShortcut ? "delivery-in" : "in",
+    sourceHandle: isUserRoute ? "out" : isManifestShortcut ? "delivery-out" : isInfrastructureValidation ? "infrastructure-out" : isProvisioning ? "cluster-out" : isRuntimeTraffic ? "traffic-out" : isResourceRelation ? "relation-out" : "out",
+    targetHandle: isUserRoute ? "journey-in" : isManifestShortcut ? "delivery-in" : isInfrastructureValidation ? "infrastructure-in" : isProvisioning ? "provision-in" : isRuntimeTraffic ? "traffic-in" : isResourceRelation ? "relation-in" : "in",
     markerEnd: { type: MarkerType.ArrowClosed, color: style.stroke, width: 18, height: 18 },
     style: { stroke: style.stroke, strokeWidth: style.strokeWidth, strokeDasharray: style.strokeDasharray },
     labelStyle: { fill: "#d8d8d8", fontSize: 10, fontWeight: 600 }, labelBgStyle: { fill: "#171717", fillOpacity: 0.96 }, labelBgPadding: [5, 3], labelBgBorderRadius: 2,
