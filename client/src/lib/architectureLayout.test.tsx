@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ContainerGroupNode, DevopsServiceNode } from "@/components/architecture/nodes";
 import { buildArchitectureLayout, buildJourneyDefinitions, buildKubernetesPlan, buildPipelinePlan } from "./architectureLayout";
+import { buildExternalRoutePath } from "@/components/architecture/ObstacleAwareEdge";
 
 describe("expandable pipeline planning", () => {
   const components = [
@@ -224,9 +225,18 @@ describe("DEPI-GP cross-section continuity", () => {
 });
 
 describe("obstacle-aware cross-section routing", () => {
-  it("keeps bottom-lane bridges below both section boundaries", async () => {
-    const { buildExternalRoutePath } = await import("@/components/architecture/ObstacleAwareEdge");
+  it("keeps bottom-lane bridges below both section boundaries", () => {
     const path = buildExternalRoutePath(420, 488, 1260, 504, "bottom", 96);
     expect(path).toBe("M 420 488 L 420 600 L 1260 600 L 1260 504");
+  });
+
+  it("keeps User Journey traffic above a full Cluster frame", () => {
+    const path = buildExternalRoutePath(360, 280, 1260, 520, "top", 96);
+    expect(path).toBe("M 360 280 L 360 184 L 1260 184 L 1260 520");
+  });
+
+  it("supports a side lane outside the rightmost obstacle", () => {
+    const path = buildExternalRoutePath(420, 488, 1260, 504, "side", 96);
+    expect(path).toBe("M 420 488 L 1356 488 L 1356 504 L 1260 504");
   });
 });

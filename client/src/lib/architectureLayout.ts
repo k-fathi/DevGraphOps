@@ -9,7 +9,7 @@ import type { ContainerNodeData, ServiceNodeData } from "@/components/architectu
 
 export type ArchitectureView = "high" | "detailed";
 export type ArchitectureNode = Node<ContainerNodeData, "containerGroup"> | Node<ServiceNodeData, "devopsService"> | Node<ServiceNodeData, "pipelineStep">;
-export type ArchitectureEdge = Edge<{ kind: RelationKind; evidence?: string; routing?: "bottom" | "top" }>;
+export type ArchitectureEdge = Edge<{ kind: RelationKind; evidence?: string; routing?: "bottom" | "side" | "top" }>;
 export type JourneyMode = "overview" | "user" | "devops";
 export type JourneyStep = { id: string; label: string; evidence?: string; parallel?: boolean };
 export type JourneyDefinition = { id: Exclude<JourneyMode, "overview">; title: string; summary: string; nodeIds: string[]; edgeIds: string[]; steps: JourneyStep[] };
@@ -193,7 +193,7 @@ function groupNode(definition: GroupDefinition, position: { x: number; y: number
   };
 }
 
-function makeEdge(id: string, source: string, target: string, label: string, kind: RelationKind, evidence?: string): ArchitectureEdge {
+function makeEdge(id: string, source: string, target: string, label: string, kind: RelationKind, evidence?: string, routingMode: "bottom" | "side" = "bottom"): ArchitectureEdge {
   const styleByKind: Record<RelationKind, { stroke: string; strokeWidth: number; strokeDasharray?: string; animated: boolean }> = {
     traffic: { stroke: "#4f9938", strokeWidth: 2.1, strokeDasharray: "8 6", animated: false },
     deployment: { stroke: "#9abb45", strokeWidth: 2.35, strokeDasharray: "7 5", animated: false },
@@ -207,7 +207,7 @@ function makeEdge(id: string, source: string, target: string, label: string, kin
   const isProvisioning = source === "infrastructure" && target === "cluster" && label === "provisions Kubernetes";
   const isRuntimeTraffic = kind === "traffic" && !isUserRoute;
   const isResourceRelation = kind === "dependency" && !isManifestShortcut && !isProvisioning;
-  const routing = isManifestShortcut || isProvisioning ? "bottom" : undefined;
+  const routing = isUserRoute ? "top" : isManifestShortcut || isProvisioning ? routingMode : undefined;
   return {
     id, source, target, type: routing ? "obstacleAware" : "step", animated: style.animated, label, data: { kind, evidence, routing }, selectable: false, zIndex: 2,
     sourceHandle: isUserRoute ? "out" : isManifestShortcut ? "delivery-out" : isInfrastructureValidation ? "infrastructure-out" : isProvisioning ? "cluster-out" : isRuntimeTraffic ? "traffic-out" : isResourceRelation ? "relation-out" : "out",
@@ -385,7 +385,7 @@ export function buildJourneyDefinitions(analysis: RepositoryAnalysis, nodes: Arc
   ];
 }
 
-export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView, pipelineExpanded = false, pipelineClosing = false, clusterExpanded = false, expandedNamespaceIds: string[] = [], expandedWorkloadIds: string[] = []): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
+export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view: ArchitectureView, pipelineExpanded = false, pipelineClosing = false, clusterExpanded = false, expandedNamespaceIds: string[] = [], expandedWorkloadIds: string[] = [], routingMode: "bottom" | "side" = "bottom"): Promise<{ nodes: ArchitectureNode[]; edges: ArchitectureEdge[] }> {
   const groups = createGroups(analysis);
   const pipelinePlan = buildPipelinePlan(analysis);
   const kubernetesPlan = buildKubernetesPlan(analysis, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds);
@@ -427,7 +427,7 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
     const source = knownNodeIds.has(relation.source) ? relation.source : groupForComponent.get(relation.source);
     const target = knownNodeIds.has(relation.target) ? relation.target : groupForComponent.get(relation.target);
     if (!source || !target || source === target || !knownNodeIds.has(source) || !knownNodeIds.has(target)) continue;
-    edges.push(makeEdge(`extracted-${relation.id}`, source, target, relation.label, relation.kind, relation.evidence));
+    edges.push(makeEdge(`extracted-${relation.id}`, source, target, relation.label, relation.kind, relation.evidence, routingMode));
   }
 
   if (clusterExpanded && knownNodeIds.has("cluster")) {

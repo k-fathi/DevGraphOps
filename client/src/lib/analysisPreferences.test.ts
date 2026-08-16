@@ -12,6 +12,7 @@ const preferences: AnalysisPreferences = {
   serviceDeploymentFocus: true,
   environmentFilter: "production",
   namespaceFilter: "prod",
+  routingMode: "side",
 };
 
 describe("analysis preferences", () => {
@@ -32,5 +33,6 @@ describe("analysis preferences", () => {
     expect(url.searchParams.get("environment")).toBe("production");
     expect(url.searchParams.get("namespace")).toBe("prod");
     expect(url.searchParams.get("focus")).toBe("1");
+    expect(url.searchParams.get("routing")).toBe("side");
   });
 });

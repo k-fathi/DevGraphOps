@@ -94,7 +94,7 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
 
     const clusterToggles = await screen.findAllByRole("button", { name: "Kubernetes: expand topology" });
     await user.click(clusterToggles.at(-1)!);
-    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], []));
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], [], "bottom"));
     expect(screen.getAllByRole("button", { name: "Kubernetes: collapse topology" }).length).toBeGreaterThan(0);
   });
 
@@ -103,7 +103,7 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     render(<DevOpsArchitectureCanvas />);
 
     await user.click(await screen.findByRole("button", { name: "Cluster focus: Service → Deployment" }));
-    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], []));
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], [], "bottom"));
     expect(screen.getByRole("button", { name: "Cluster focus: exit" })).toBeTruthy();
   });
 
@@ -112,7 +112,7 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     render(<DevOpsArchitectureCanvas />);
 
     await user.click(await screen.findByRole("button", { name: "Trace User Journey" }));
-    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], []));
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], [], "bottom"));
   });
 
   it("opens the Cluster and reveals the execution map without flooding the Canvas when tracing the DevOps Journey", async () => {
@@ -124,7 +124,7 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     render(<DevOpsArchitectureCanvas />);
 
     await user.click(await screen.findByRole("button", { name: "Trace DevOps Journey" }));
-    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(expect.anything(), "detailed", false, false, true, [], []));
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(expect.anything(), "detailed", false, false, true, [], [], "bottom"));
   });
 
   it("explains that live execution status is currently GitHub Actions-only for other providers", async () => {
@@ -158,6 +158,14 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     expect(screen.getByRole("option", { name: "prod" })).toBeTruthy();
     await user.selectOptions(namespace, "prod");
     expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
+  });
+
+  it("switches between bottom and side arrow lanes", async () => {
+    const user = userEvent.setup();
+    render(<DevOpsArchitectureCanvas />);
+    const lanes = await screen.findByLabelText("Arrow lanes");
+    await user.selectOptions(lanes, "side");
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, false, [], [], "side"));
   });
 
   it("supports explicit zoom controls and displays evidence hover guidance", async () => {

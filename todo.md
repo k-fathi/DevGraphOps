@@ -246,3 +246,10 @@
 - [x] Adjust section positions and edge handles without weakening evidence-only relationships or arrow direction.
 - [x] Add geometry and regression tests proving cross-section routes avoid the interior of obstacle frames.
 - [x] Re-run the full test suite, build, and DEPI-GP visual review, then checkpoint and push to `k-fathi/DevGraphOps/main`.
+
+## User Journey Lane and Routing Modes
+- [x] Add a dedicated top routing lane for User Journey traffic around the Cluster frame.
+- [x] Add a user-facing routing mode switch between Bottom lanes and Side lanes.
+- [x] Improve edge hover styling so the hovered relationship and its route become visually prominent.
+- [x] Add regression tests for top routing, routing mode persistence, and hover highlighting.
+- [x] Verify DEPI-GP visually, run tests and build, checkpoint, and push the update to `k-fathi/DevGraphOps/main`.

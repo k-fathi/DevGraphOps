@@ -1,4 +1,6 @@
-import type { ArchitectureView, JourneyMode } from "@/lib/architectureLayout";
+import type { ArchitectureView, JourneyMode } from "./architectureLayout";
+
+export type RoutingMode = "bottom" | "side";
 
 export type AnalysisPreferences = {
   view: ArchitectureView;
@@ -10,6 +12,7 @@ export type AnalysisPreferences = {
   serviceDeploymentFocus: boolean;
   environmentFilter: string;
   namespaceFilter: string;
+  routingMode: RoutingMode;
 };
 
 export const DEFAULT_ANALYSIS_PREFERENCES: AnalysisPreferences = {
@@ -22,6 +25,7 @@ export const DEFAULT_ANALYSIS_PREFERENCES: AnalysisPreferences = {
   serviceDeploymentFocus: false,
   environmentFilter: "all",
   namespaceFilter: "all",
+  routingMode: "bottom",
 };
 
 const STORAGE_KEY = "repogram.analysis-settings.v1";
@@ -32,6 +36,7 @@ export function preferencesFromSearch(search: string): Partial<AnalysisPreferenc
   const params = new URLSearchParams(search);
   const view = params.get("view");
   const journeyMode = params.get("journey");
+  const routing = params.get("routing");
   return {
     ...(view === "high" || view === "detailed" ? { view } : {}),
     ...(journeyMode === "overview" || journeyMode === "user" || journeyMode === "devops" ? { journeyMode } : {}),
@@ -42,6 +47,7 @@ export function preferencesFromSearch(search: string): Partial<AnalysisPreferenc
     ...(params.has("workloads") ? { expandedWorkloadIds: parseArray(params.get("workloads")) } : {}),
     ...(params.has("environment") ? { environmentFilter: params.get("environment") || "all" } : {}),
     ...(params.has("namespace") ? { namespaceFilter: params.get("namespace") || "all" } : {}),
+    ...(routing === "bottom" || routing === "side" ? { routingMode: routing as RoutingMode } : {}),
   };
 }
 
@@ -56,6 +62,7 @@ export function preferencesToSearch(preferences: AnalysisPreferences): string {
   if (preferences.expandedWorkloadIds.length) params.set("workloads", arrayParam(preferences.expandedWorkloadIds));
   if (preferences.environmentFilter !== "all") params.set("environment", preferences.environmentFilter);
   if (preferences.namespaceFilter !== "all") params.set("namespace", preferences.namespaceFilter);
+  if (preferences.routingMode !== "bottom") params.set("routing", preferences.routingMode);
   return params.toString();
 }
 

@@ -43,11 +43,13 @@ export default function DevOpsArchitectureCanvas() {
   const [serviceDeploymentFocus, setServiceDeploymentFocus] = useState(false);
   const [environmentFilter, setEnvironmentFilter] = useState("all");
   const [namespaceFilter, setNamespaceFilter] = useState("all");
+  const [routingMode, setRoutingMode] = useState<"bottom" | "side">("bottom");
   const [shareMessage, setShareMessage] = useState("");
   const pendingPreferences = useRef<Partial<AnalysisPreferences> | null>(null);
   const [journeys, setJourneys] = useState<JourneyDefinition[]>([]);
   const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection | null>(null);
   const [hoverHint, setHoverHint] = useState("");
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<ArchitectureEdge>([]);
@@ -67,8 +69,9 @@ export default function DevOpsArchitectureCanvas() {
     setServiceDeploymentFocus(preferences.serviceDeploymentFocus);
     setEnvironmentFilter(preferences.environmentFilter);
     setNamespaceFilter(preferences.namespaceFilter);
+    setRoutingMode(preferences.routingMode);
   }, []);
-  const currentPreferences = useMemo<AnalysisPreferences>(() => preferenceSnapshot({ view, journeyMode, pipelineExpanded, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds, serviceDeploymentFocus, environmentFilter, namespaceFilter }), [clusterExpanded, environmentFilter, expandedNamespaceIds, expandedWorkloadIds, journeyMode, namespaceFilter, pipelineExpanded, serviceDeploymentFocus, view]);
+  const currentPreferences = useMemo<AnalysisPreferences>(() => preferenceSnapshot({ view, journeyMode, pipelineExpanded, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds, serviceDeploymentFocus, environmentFilter, namespaceFilter, routingMode }), [clusterExpanded, environmentFilter, expandedNamespaceIds, expandedWorkloadIds, journeyMode, namespaceFilter, pipelineExpanded, routingMode, serviceDeploymentFocus, view]);
   const diagramAnalysis = useMemo(() => {
     if (!analysis) return null;
     const visibleComponents = analysis.components.filter((component) => (environmentFilter === "all" || component.environment === environmentFilter) && (namespaceFilter === "all" || component.namespace === namespaceFilter));
@@ -119,7 +122,7 @@ export default function DevOpsArchitectureCanvas() {
     }
     let active = true;
     if (!diagramAnalysis) return;
-    buildArchitectureLayout(diagramAnalysis, view, showPipelineDetails, pipelineClosing, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds).then((layout) => {
+    buildArchitectureLayout(diagramAnalysis, view, showPipelineDetails, pipelineClosing, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds, routingMode).then((layout) => {
       if (!active) return;
       const definitions = buildJourneyDefinitions(diagramAnalysis, layout.nodes, layout.edges);
       const selectedJourney = definitions.find((journey) => journey.id === journeyMode);
@@ -144,13 +147,15 @@ export default function DevOpsArchitectureCanvas() {
       }));
       setEdges(layout.edges.map((edge) => {
         const isActive = serviceDeploymentFocus ? edge.id === focusedEdge : selectedEdges.has(edge.id);
-        const isHighlighted = Boolean(serviceDeploymentFocus || selectedJourney);
+        const isJourneyHighlighted = Boolean(serviceDeploymentFocus || selectedJourney);
+        const isHovered = edge.id === hoveredEdgeId;
+        const isDimmed = isJourneyHighlighted && !isActive && !isHovered;
         return {
           ...edge,
-          animated: Boolean(isHighlighted && isActive),
-          className: isHighlighted ? (isActive ? "journey-edge--active" : "journey-edge--dimmed") : undefined,
-          style: isHighlighted ? { ...edge.style, opacity: isActive ? 1 : 0.08, strokeWidth: isActive ? 4 : 1 } : edge.style,
-          labelStyle: isHighlighted ? { ...edge.labelStyle, opacity: isActive ? 1 : 0 } : edge.labelStyle,
+          animated: Boolean((isJourneyHighlighted && isActive) || isHovered),
+          className: isHovered ? "edge-hovered" : isJourneyHighlighted ? (isActive ? "journey-edge--active" : "journey-edge--dimmed") : undefined,
+          style: { ...edge.style, opacity: isDimmed ? 0.08 : 1, stroke: isHovered ? "#d8ed8c" : edge.style?.stroke, strokeWidth: isHovered ? 4.5 : isJourneyHighlighted && isActive ? 4 : isDimmed ? 1 : edge.style?.strokeWidth },
+          labelStyle: { ...edge.labelStyle, opacity: isHovered || !isJourneyHighlighted || isActive ? 1 : 0 },
         };
       }));
       requestAnimationFrame(() => flow?.fitView({
@@ -163,7 +168,7 @@ export default function DevOpsArchitectureCanvas() {
     return () => {
       active = false;
     };
-  }, [analysis, clusterExpanded, diagramAnalysis, expandedNamespaceIds, expandedWorkloadIds, flow, journeyMode, pipelineClosing, serviceDeploymentFocus, setEdges, setNodes, showPipelineDetails, toggleCluster, toggleNamespace, togglePipeline, toggleWorkload, view]);
+  }, [analysis, clusterExpanded, diagramAnalysis, expandedNamespaceIds, expandedWorkloadIds, flow, hoveredEdgeId, journeyMode, pipelineClosing, routingMode, serviceDeploymentFocus, setEdges, setNodes, showPipelineDetails, toggleCluster, toggleNamespace, togglePipeline, toggleWorkload, view]);
 
   const detectedServices = useMemo(() => analysis ? Object.values(analysis.signals).filter(Boolean).length : 0, [analysis]);
   const providerLabel = analysis?.repository.provider === "github" ? "GitHub" : analysis?.repository.provider === "gitlab" ? "GitLab" : "Bitbucket";
@@ -379,6 +384,7 @@ export default function DevOpsArchitectureCanvas() {
         <label>Environment<select value={environmentFilter} onChange={(event) => { setEnvironmentFilter(event.target.value); setServiceDeploymentFocus(false); }}><option value="all">All environments</option>{availableEnvironments.map((environment) => <option value={environment} key={environment}>{environment}</option>)}</select></label>
         <label>Namespace<select value={namespaceFilter} onChange={(event) => { setNamespaceFilter(event.target.value); setServiceDeploymentFocus(false); }}><option value="all">All namespaces</option>{availableNamespaces.map((namespace) => <option value={namespace} key={namespace}>{namespace}</option>)}</select></label>
         {(environmentFilter !== "all" || namespaceFilter !== "all") && <button className="diagram-filters__clear" onClick={() => { setEnvironmentFilter("all"); setNamespaceFilter("all"); }}>Clear filters</button>}
+        <label>Arrow lanes<select value={routingMode} onChange={(event) => setRoutingMode(event.target.value as "bottom" | "side")}><option value="bottom">Bottom lanes</option><option value="side">Side lanes</option></select></label>
       </section>
 
       <section className="journey-console" aria-label="Journey trace controls">
@@ -419,8 +425,8 @@ export default function DevOpsArchitectureCanvas() {
           onNodeClick={onJourneyNodeClick}
           onNodeMouseEnter={(_event, node) => { const evidence = "evidence" in node.data ? node.data.evidence : undefined; setHoverHint(`${node.data.label}${evidence ? ` · Evidence: ${evidence}` : ""}`); }}
           onNodeMouseLeave={() => setHoverHint("")}
-          onEdgeMouseEnter={(_event, edge) => setHoverHint(`${String(edge.label ?? "Relationship")} · ${edge.data?.evidence ?? "Evidence path not retained"}`)}
-          onEdgeMouseLeave={() => setHoverHint("")}
+          onEdgeMouseEnter={(_event, edge) => { setHoveredEdgeId(edge.id); setHoverHint(`${String(edge.label ?? "Relationship")} · ${edge.data?.evidence ?? "Evidence path not retained"}`); }}
+          onEdgeMouseLeave={() => { setHoveredEdgeId(null); setHoverHint(""); }}
           onEdgeClick={(_event, edge) => { const selection = selectRelationshipEvidence(edge.data?.evidence, edge.source, edge.target, String(edge.label ?? "Relationship evidence")); if (selection) setEvidenceSelection(selection); }}
           onMove={(_event, viewport) => setZoomPercent(Math.round(viewport.zoom * 100))}
           onInit={setFlow}
