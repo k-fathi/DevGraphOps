@@ -223,3 +223,12 @@
 - [x] Clarify the evidenced User Journey as a continuous, directional route through the live entry path without inventing missing resources.
 - [x] Add DEPI-GP-focused layout and journey regression tests covering non-overlapping section continuity.
 - [ ] Iterate screenshot review, validate the production build, then checkpoint and push the layout refinement to `k-fathi/DevGraphOps` main.
+
+- [ ] Retry the authorized DEPI-GP refinement push to `k-fathi/DevGraphOps/main` and verify the remote commit after GitHub write authentication is refreshed.
+
+## Edge Routing and Infrastructure Bridge Refinement
+- [ ] Diagnose DEPI-GP edge crossings, duplicate section routes, and Pipeline-to-Infrastructure connection clarity.
+- [ ] Improve relationship edge routing and distinct ports so traffic, delivery, dependency, and infrastructure bridges do not overlap unnecessarily.
+- [ ] Verify Terraform validation and Kubernetes provisioning links remain evidence-backed and target visible section nodes.
+- [ ] Add regression tests for edge deduplication, routing continuity, and Pipeline-to-Infrastructure relationships.
+- [ ] Validate the revised DEPI-GP screenshot, run the full test suite and production build, checkpoint, and push to `k-fathi/DevGraphOps/main`.
