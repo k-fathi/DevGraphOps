@@ -214,4 +214,4 @@
 - [x] Add an environment filter that exposes only evidence-backed environment labels discovered from repository configuration.
 - [x] Add a namespace filter that scopes the diagram to a declared namespace while retaining its necessary evidenced relationship context.
 - [x] Add filter, settings, and share-link regression tests; validate the interaction flow and production build.
-- [ ] Save a checkpoint and push the completed collaboration enhancements to `k-fathi/DevGraphOps` main.
+- [x] Save a checkpoint and push the completed collaboration enhancements to `k-fathi/DevGraphOps` main.
