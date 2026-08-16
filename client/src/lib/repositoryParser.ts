@@ -49,6 +49,7 @@ export type ExtractedComponent = {
   evidence?: string;
   tools?: string[];
   namespace?: string;
+  environment?: string;
 };
 
 export type PipelineExecutionState = "success" | "running" | "failed" | "queued" | "neutral";
@@ -93,7 +94,22 @@ type JsonRecord = Record<string, unknown>;
 type RepositoryDescriptor = { branch: string; url: string; paths: string[]; fetchRef?: string };
 type ContentFile = { path: string; content: string };
 type TerraformBlock = { key: string; id: string; body: string; path: string; label: string; icon: string };
-type KubernetesResource = { id: string; kind: string; name: string; namespace?: string; source: string; data: JsonRecord };
+type KubernetesResource = { id: string; kind: string; name: string; namespace?: string; environment?: string; source: string; data: JsonRecord };
+
+function environmentFromRecord(record: JsonRecord | undefined): string | undefined {
+  if (!record) return undefined;
+  const metadata = asRecord(record.metadata);
+  const template = asRecord(asRecord(record.spec)?.template);
+  const templateMetadata = asRecord(template?.metadata);
+  const labels = { ...asRecord(metadata?.labels), ...asRecord(templateMetadata?.labels) };
+  const annotations = { ...asRecord(metadata?.annotations), ...asRecord(templateMetadata?.annotations) };
+  const candidates = [record.environment, record.env, labels.environment, labels.env, annotations.environment, annotations.env]
+    .map(asString)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0 && value.length <= 48);
+  return candidates[0];
+}
 
 // Conservative limits keep public, unauthenticated provider APIs responsive while still surfacing core deployment evidence.
 const MAX_TREE_ENTRIES = 800;
@@ -608,7 +624,7 @@ export function parseKubernetes(files: ContentFile[]) {
       for (const [name, candidate] of Object.entries(jobs ?? {})) {
         const id = `github-job-${slug(name)}`;
         const job = asRecord(candidate);
-        pipelineStages.push({ id, label: `Job: ${name}`, icon: "GitHub Actions", domain: "pipeline", evidence: file.path, tools: job ? githubWorkflowToolLabels(job, workflowHasGhcr) : [] });
+            pipelineStages.push({ id, label: `Job: ${name}`, icon: "GitHub Actions", domain: "pipeline", evidence: file.path, environment: environmentFromRecord(job), tools: job ? githubWorkflowToolLabels(job, workflowHasGhcr) : [] });
         referencedNames(job?.needs).forEach((dependency) => pipelineRelations.push({ id: `github-needs-${slug(dependency)}-${slug(name)}`, source: `github-job-${slug(dependency)}`, target: id, label: "needs", kind: "deployment", evidence: file.path }));
         const manifestPaths = Array.from(JSON.stringify(job ?? {}).matchAll(/(?:^|[^a-z0-9_])((?:k8s|kubernetes)\/[a-z0-9_./-]+\.ya?ml)\b/gi)).map((match) => match[1]).filter((path): path is string => Boolean(path));
         if (manifestPaths.length) pipelineManifestReferences.push({ stageId: id, paths: Array.from(new Set(manifestPaths)), evidence: file.path });
@@ -635,9 +651,10 @@ export function parseKubernetes(files: ContentFile[]) {
       if (!["ingress", "service", "deployment", "statefulset", "daemonset", "replicaset", "pod", "configmap", "secret", "persistentvolumeclaim", "namespace", "horizontalpodautoscaler", "externalsecret"].includes(normalizedKind)) continue;
       const id = `k8s-${slug(kind)}-${slug(name)}-${slug(file.path)}`;
       const namespace = normalizedKind === "namespace" ? name : asString(metadata?.namespace) || undefined;
-      resources.push({ id, kind, name, namespace, source: file.path, data: record });
+      const environment = environmentFromRecord(record);
+      resources.push({ id, kind, name, namespace, environment, source: file.path, data: record });
       const icon = normalizedKind === "statefulset" ? "StatefulSet" : normalizedKind === "daemonset" ? "DaemonSet" : normalizedKind === "replicaset" ? "ReplicaSet" : normalizedKind === "horizontalpodautoscaler" ? "HorizontalPodAutoscaler" : normalizedKind === "externalsecret" ? "Secret" : normalizedKind === "namespace" ? "Namespace" : kind;
-      components.push({ id, label: `${kind}: ${name}`, icon, domain: "cluster", evidence: file.path, namespace });
+      components.push({ id, label: `${kind}: ${name}`, icon, domain: "cluster", evidence: file.path, namespace, environment });
     }
   }
 

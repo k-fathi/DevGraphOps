@@ -129,6 +129,19 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
 .export-actions button:hover:not(:disabled) { background: #415125; color: #ffffff; }
 .export-actions button:active:not(:disabled) { transform: scale(0.97); }
 .export-actions button:disabled { opacity: 0.6; cursor: wait; }
+.analysis-actions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.analysis-actions button { display: inline-flex; align-items: center; gap: 4px; min-height: 25px; border: 1px solid #6b7651; background: #202518; color: #dce8b0; padding: 0 7px; font: 600 9px/1 "IBM Plex Mono", monospace; cursor: pointer; transition: background 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1); }
+.analysis-actions button:hover { background: #35431f; color: #ffffff; }
+.analysis-actions button:active { transform: scale(0.97); }
+.analysis-action-message { color: #e8c28c; font: 600 9px/1.2 "IBM Plex Mono", monospace; }
+.diagram-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; padding: 8px 12px; border: 1px solid #3f3f3f; border-top: 0; background: #171717; color: #bdbdbd; font: 600 9px/1.2 "IBM Plex Mono", monospace; }
+.diagram-filters__heading { display: grid; gap: 3px; margin-right: auto; color: #dfeab6; }
+.diagram-filters__heading span { color: #858585; font-size: 8px; font-weight: 500; }
+.diagram-filters label { display: grid; gap: 4px; color: #a8a8a8; }
+.diagram-filters select { min-width: 130px; border: 1px solid #555555; background: #242424; color: #eeeeee; padding: 5px 7px; font: 600 9px/1 "IBM Plex Mono", monospace; }
+.diagram-filters select:focus-visible, .analysis-actions button:focus-visible, .diagram-filters__clear:focus-visible { outline: 2px solid #e3b4d0; outline-offset: 2px; }
+.diagram-filters__clear { border: 1px solid #98678c; background: #2a1d27; color: #f0bddc; padding: 6px 8px; font: 700 9px/1 "IBM Plex Mono", monospace; cursor: pointer; }
+.diagram-filters__clear:hover { background: #42283d; }
 
 .architecture-canvas { position: relative; height: clamp(620px, calc(100vh - 320px), 760px); min-height: 620px; overflow: hidden; border: 1px solid #4b4b4b; background: #101010; }
 .canvas-texture { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0; background: none; }
@@ -284,7 +297,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
   .analyze-button { width: 100%; justify-content: center; }
   .workspace-toolbar { align-items: flex-start; flex-wrap: wrap; }
   .workspace-toolbar__signal { display: none; }
-  .export-actions { order: 4; width: 100%; justify-content: flex-end; }
+  .export-actions, .analysis-actions { order: 4; width: 100%; justify-content: flex-end; }
+  .diagram-filters { align-items: stretch; }
+  .diagram-filters__heading { width: 100%; }
+  .diagram-filters label { flex: 1 1 130px; }
   .view-toggle { order: 3; width: 100%; }
   .view-toggle button { flex: 1; padding: 8px 6px; }
   .architecture-canvas { height: calc(100vh - 260px); min-height: 620px; }

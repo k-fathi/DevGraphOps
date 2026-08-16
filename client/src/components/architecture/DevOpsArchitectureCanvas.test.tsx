@@ -113,9 +113,45 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     expect(container.textContent).toContain("Stages without a report remain neutral rather than receiving a simulated result.");
   });
 
-  it("labels GitHub stages as Not reported when no public job result is available", async () => {
+    it("labels GitHub stages as Not reported when no public job result is available", async () => {
     const { container } = render(<PipelineStatusScope provider="github" />);
     expect(container.textContent).toContain("Colors are applied only when the public GitHub Actions API reports a recent job result.");
     expect(container.textContent).toContain("Stages without a report remain neutral rather than receiving a simulated result.");
+  });
+  it("shows only evidence-backed environment and namespace filters and scopes the visible count", async () => {
+    const user = userEvent.setup();
+    analyzeRepositoryMock.mockResolvedValue({
+      ...analysis,
+      components: [
+        ...analysis.components,
+        { id: "prod-deployment", label: "Deployment: prod", icon: "Deployment", domain: "cluster" as const, evidence: "k8s/prod.yml", environment: "production", namespace: "prod" },
+        { id: "dev-service", label: "Service: dev", icon: "Service", domain: "cluster" as const, evidence: "k8s/dev.yml", environment: "development", namespace: "dev" },
+      ],
+    });
+    render(<DevOpsArchitectureCanvas />);
+    const environment = await screen.findByLabelText("Environment");
+    expect(screen.getByRole("option", { name: "production" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "development" })).toBeTruthy();
+    await user.selectOptions(environment, "production");
+    expect(screen.getByText("1 visible of 4")).toBeTruthy();
+    const namespace = screen.getByLabelText("Namespace");
+    expect(screen.getByRole("option", { name: "prod" })).toBeTruthy();
+    await user.selectOptions(namespace, "prod");
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
+  });
+
+  it("copies a share link and persists the current analysis settings", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(<DevOpsArchitectureCanvas />);
+    await screen.findByRole("button", { name: "Share" });
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("repo=https%3A%2F%2Fgithub.com%2Facme%2Fdemo")));
+    expect(screen.getByRole("status").textContent).toContain("Share link copied");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(screen.getByRole("status").textContent).toContain("saved on this device");
+    await user.click(screen.getByRole("button", { name: "Load settings" }));
+    expect(screen.getByRole("status").textContent).toContain("loaded");
   });
 });

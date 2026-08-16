@@ -448,4 +448,23 @@ spec:
     expect(groupIds).not.toContain("infrastructure");
     expect(layout.edges.map((edge) => edge.id)).toEqual(["extracted-user-ingress"]);
   });
+  it("extracts evidence-backed environment labels from Kubernetes metadata and workload templates", () => {
+    const parsed = parseKubernetes([{ path: "k8s/environments.yml", content: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    environment: production
+spec:
+  template:
+    metadata:
+      labels:
+        app: api
+        environment: production
+` }]);
+
+    expect(parsed.components).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "Deployment: api", environment: "production", evidence: "k8s/environments.yml" }),
+    ]));
+  });
 });

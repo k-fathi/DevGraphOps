@@ -2,8 +2,8 @@
  * Visual direction: off-black diagram workspace with charcoal controls, dashed green routing,
  * and limited olive, amber, and pink functional signals in place of blue or neon accents.
  */
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, Download, FileCode2, FileImage, FileType2, GitBranch, LoaderCircle, ScanSearch } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Clipboard, Download, FileCode2, FileImage, FileType2, GitBranch, LoaderCircle, ScanSearch, Save, Upload } from "lucide-react";
 import { toPng, toSvg } from "html-to-image";
 import {
   Background,
@@ -19,6 +19,7 @@ import { architectureNodeTypes } from "@/components/architecture/nodes";
 import { buildArchitectureLayout, buildJourneyDefinitions, buildPipelinePlan, type ArchitectureEdge, type ArchitectureNode, type ArchitectureView, type JourneyDefinition, type JourneyMode } from "@/lib/architectureLayout";
 import { trpc } from "@/lib/trpc";
 import type { RepositoryAnalysis } from "@/lib/repositoryParser";
+import { buildShareUrl, DEFAULT_ANALYSIS_PREFERENCES, loadAnalysisPreferences, preferenceSnapshot, preferencesFromSearch, saveAnalysisPreferences, type AnalysisPreferences } from "@/lib/analysisPreferences";
 import { createEvidenceSelection, selectNodeEvidence, selectRelationshipEvidence, tokenizeEvidenceLine, type EvidenceSelection } from "@/lib/evidencePanel";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -39,6 +40,10 @@ export default function DevOpsArchitectureCanvas() {
   const [expandedNamespaceIds, setExpandedNamespaceIds] = useState<string[]>([]);
   const [expandedWorkloadIds, setExpandedWorkloadIds] = useState<string[]>([]);
   const [serviceDeploymentFocus, setServiceDeploymentFocus] = useState(false);
+  const [environmentFilter, setEnvironmentFilter] = useState("all");
+  const [namespaceFilter, setNamespaceFilter] = useState("all");
+  const [shareMessage, setShareMessage] = useState("");
+  const pendingPreferences = useRef<Partial<AnalysisPreferences> | null>(null);
   const [journeys, setJourneys] = useState<JourneyDefinition[]>([]);
   const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureNode>([]);
@@ -46,6 +51,29 @@ export default function DevOpsArchitectureCanvas() {
   const [flow, setFlow] = useState<ReactFlowInstance<ArchitectureNode, ArchitectureEdge> | null>(null);
   const { mutateAsync: analyzeRepository, isPending: loading } = trpc.repository.analyze.useMutation();
   const showPipelineDetails = pipelineExpanded || pipelineClosing;
+  const applyPreferences = useCallback((raw: Partial<AnalysisPreferences>) => {
+    const preferences = { ...DEFAULT_ANALYSIS_PREFERENCES, ...raw };
+    setView(preferences.view);
+    setJourneyMode(preferences.journeyMode);
+    setPipelineExpanded(preferences.pipelineExpanded);
+    setPipelineClosing(false);
+    setClusterExpanded(preferences.clusterExpanded);
+    setExpandedNamespaceIds(preferences.expandedNamespaceIds);
+    setExpandedWorkloadIds(preferences.expandedWorkloadIds);
+    setServiceDeploymentFocus(preferences.serviceDeploymentFocus);
+    setEnvironmentFilter(preferences.environmentFilter);
+    setNamespaceFilter(preferences.namespaceFilter);
+  }, []);
+  const currentPreferences = useMemo<AnalysisPreferences>(() => preferenceSnapshot({ view, journeyMode, pipelineExpanded, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds, serviceDeploymentFocus, environmentFilter, namespaceFilter }), [clusterExpanded, environmentFilter, expandedNamespaceIds, expandedWorkloadIds, journeyMode, namespaceFilter, pipelineExpanded, serviceDeploymentFocus, view]);
+  const diagramAnalysis = useMemo(() => {
+    if (!analysis) return null;
+    const visibleComponents = analysis.components.filter((component) => (environmentFilter === "all" || component.environment === environmentFilter) && (namespaceFilter === "all" || component.namespace === namespaceFilter));
+    const visibleIds = new Set(visibleComponents.map((component) => component.id));
+    const visibleRelations = analysis.relations.filter((relation) => visibleIds.has(relation.source) && visibleIds.has(relation.target) || relation.source === "user" && visibleIds.has(relation.target));
+    return { ...analysis, components: visibleComponents, relations: visibleRelations };
+  }, [analysis, environmentFilter, namespaceFilter]);
+  const availableEnvironments = useMemo(() => Array.from(new Set((analysis?.components ?? []).map((component) => component.environment).filter((value): value is string => Boolean(value)))).sort(), [analysis]);
+  const availableNamespaces = useMemo(() => Array.from(new Set((analysis?.components ?? []).map((component) => component.namespace).filter((value): value is string => Boolean(value)))).sort(), [analysis]);
   const toggleCluster = useCallback(() => {
     setView("detailed");
     setClusterExpanded((expanded) => !expanded);
@@ -84,13 +112,14 @@ export default function DevOpsArchitectureCanvas() {
       return;
     }
     let active = true;
-    buildArchitectureLayout(analysis, view, showPipelineDetails, pipelineClosing, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds).then((layout) => {
+    if (!diagramAnalysis) return;
+    buildArchitectureLayout(diagramAnalysis, view, showPipelineDetails, pipelineClosing, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds).then((layout) => {
       if (!active) return;
-      const definitions = buildJourneyDefinitions(analysis, layout.nodes, layout.edges);
+      const definitions = buildJourneyDefinitions(diagramAnalysis, layout.nodes, layout.edges);
       const selectedJourney = definitions.find((journey) => journey.id === journeyMode);
       const selectedNodes = new Set(selectedJourney?.nodeIds ?? []);
       const selectedEdges = new Set(selectedJourney?.edgeIds ?? []);
-      const focusRelation = analysis.relations.find((relation) => relation.label === "Selects" && analysis.components.some((component) => component.id === relation.source && component.icon === "Service") && analysis.components.some((component) => component.id === relation.target && component.icon === "Deployment"));
+      const focusRelation = diagramAnalysis.relations.find((relation) => relation.label === "Selects" && diagramAnalysis.components.some((component) => component.id === relation.source && component.icon === "Service") && diagramAnalysis.components.some((component) => component.id === relation.target && component.icon === "Deployment"));
       const focusedNodes = new Set(serviceDeploymentFocus && focusRelation ? [focusRelation.source, focusRelation.target] : []);
       const focusedEdge = focusRelation ? `extracted-${focusRelation.id}` : undefined;
       const nodeOrder = new Map((selectedJourney?.nodeIds ?? []).map((id, index) => [id, index + 1]));
@@ -128,22 +157,22 @@ export default function DevOpsArchitectureCanvas() {
     return () => {
       active = false;
     };
-  }, [analysis, clusterExpanded, expandedNamespaceIds, expandedWorkloadIds, flow, journeyMode, pipelineClosing, serviceDeploymentFocus, setEdges, setNodes, showPipelineDetails, toggleCluster, toggleNamespace, togglePipeline, toggleWorkload, view]);
+  }, [analysis, clusterExpanded, diagramAnalysis, expandedNamespaceIds, expandedWorkloadIds, flow, journeyMode, pipelineClosing, serviceDeploymentFocus, setEdges, setNodes, showPipelineDetails, toggleCluster, toggleNamespace, togglePipeline, toggleWorkload, view]);
 
   const detectedServices = useMemo(() => analysis ? Object.values(analysis.signals).filter(Boolean).length : 0, [analysis]);
   const providerLabel = analysis?.repository.provider === "github" ? "GitHub" : analysis?.repository.provider === "gitlab" ? "GitLab" : "Bitbucket";
   const activeJourney = useMemo(() => journeys.find((journey) => journey.id === journeyMode), [journeyMode, journeys]);
   const pipelineFlow = useMemo(() => {
     if (!analysis) return [];
-    const plan = buildPipelinePlan(analysis);
-    const byId = new Map(analysis.components.map((component) => [component.id, component]));
+    const plan = buildPipelinePlan(diagramAnalysis ?? analysis);
+    const byId = new Map((diagramAnalysis ?? analysis).components.map((component) => [component.id, component]));
     const normalizedJobName = (value: string) => value.replace(/^Job:\s*/i, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
     const statuses = new Map((analysis.pipelineExecutionStatuses ?? []).map((status) => [normalizedJobName(status.jobName), status]));
     return Array.from({ length: plan.columns }, (_, column) => plan.stages.filter((stage) => !stage.independent && stage.column === column).sort((left, right) => left.row - right.row).map((stage) => {
       const label = byId.get(stage.id)?.label ?? stage.id;
       return { ...stage, label, status: statuses.get(normalizedJobName(label)) };
     }));
-  }, [analysis]);
+  }, [analysis, diagramAnalysis]);
   const executionStatusLabel = (state: "success" | "running" | "failed" | "queued" | "neutral") => ({ success: "Passed", running: "Running", failed: "Failed", queued: "Queued", neutral: "Not reported" })[state];
   const relationshipEvidence = useMemo(() => {
     const labels = new Map(nodes.map((node) => [node.id, node.data.label]));
@@ -189,24 +218,20 @@ export default function DevOpsArchitectureCanvas() {
     if (node.id === "repository") selectJourney("devops");
   }, [analysis, openEvidence, selectJourney, toggleCluster, toggleNamespace, togglePipeline, toggleWorkload]);
 
-  const runAnalysis = useCallback(async (targetUrl: string) => {
+  const runAnalysis = useCallback(async (targetUrl: string, requestedPreferences?: Partial<AnalysisPreferences>) => {
     setError("");
+    setShareMessage("");
     setAnalysis(null);
     setEvidenceSelection(null);
     try {
       const result = await analyzeRepository({ url: targetUrl });
       setAnalysis(result);
-      setJourneyMode("overview");
-      setPipelineExpanded(false);
-      setPipelineClosing(false);
-      setClusterExpanded(false);
-      setExpandedNamespaceIds([]);
-      setExpandedWorkloadIds([]);
-      setServiceDeploymentFocus(false);
+      applyPreferences(requestedPreferences ?? DEFAULT_ANALYSIS_PREFERENCES);
+      pendingPreferences.current = null;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "An unexpected error occurred while analyzing the repository.");
     }
-  }, [analyzeRepository]);
+  }, [analyzeRepository, applyPreferences]);
 
   const onAnalyze = useCallback(async () => {
     const targetUrl = repositoryUrl.trim();
@@ -214,14 +239,18 @@ export default function DevOpsArchitectureCanvas() {
       setError("Paste a public GitHub, GitLab, or Bitbucket repository URL, then select Analyze Repository.");
       return;
     }
+    pendingPreferences.current = null;
     await runAnalysis(targetUrl);
   }, [repositoryUrl, runAnalysis]);
 
   useEffect(() => {
-    const repositoryFromUrl = new URLSearchParams(window.location.search).get("repo");
+    const search = new URLSearchParams(window.location.search);
+    const repositoryFromUrl = search.get("repo");
     if (!repositoryFromUrl) return;
+    const sharedPreferences = preferencesFromSearch(window.location.search);
+    pendingPreferences.current = sharedPreferences;
     setRepositoryUrl(repositoryFromUrl);
-    void runAnalysis(repositoryFromUrl);
+    void runAnalysis(repositoryFromUrl, sharedPreferences);
   }, [runAnalysis]);
 
   useEffect(() => {
@@ -263,6 +292,30 @@ export default function DevOpsArchitectureCanvas() {
     }
   }, [analysis]);
 
+  const onShare = useCallback(async () => {
+    if (!analysis) return;
+    const shareUrl = buildShareUrl(repositoryUrl, currentPreferences);
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareMessage("Share link copied");
+    } catch {
+      setShareMessage("Copy was blocked; use the browser address bar to share this view.");
+    }
+  }, [analysis, currentPreferences, repositoryUrl]);
+  const onSaveSettings = useCallback(() => {
+    saveAnalysisPreferences(currentPreferences);
+    setShareMessage("Analysis settings saved on this device");
+  }, [currentPreferences]);
+  const onLoadSettings = useCallback(() => {
+    const saved = loadAnalysisPreferences();
+    if (!saved) {
+      setShareMessage("No saved analysis settings found on this device");
+      return;
+    }
+    applyPreferences(saved);
+    setShareMessage("Saved analysis settings loaded");
+  }, [applyPreferences]);
+
   return (
     <div className="archtrace-workspace">
       <section className="repository-console" aria-label="Public repository analyzer">
@@ -298,14 +351,27 @@ export default function DevOpsArchitectureCanvas() {
         </div>
         {analysis.components.some((component) => component.domain === "pipeline") && <button className="pipeline-toolbar-toggle" onClick={togglePipeline} aria-expanded={pipelineExpanded}>{pipelineExpanded ? "Pipeline: collapse stages" : "Pipeline: expand stages"}</button>}
         {analysis.components.some((component) => component.domain === "cluster") && <button className="pipeline-toolbar-toggle cluster-toolbar-toggle" onClick={toggleCluster} aria-expanded={clusterExpanded}>{clusterExpanded ? "Kubernetes: collapse topology" : "Kubernetes: expand topology"}</button>}
-        {analysis.relations.some((relation) => relation.label === "Selects" && analysis.components.some((component) => component.id === relation.source && component.icon === "Service") && analysis.components.some((component) => component.id === relation.target && component.icon === "Deployment")) && <button className={`pipeline-toolbar-toggle cluster-focus-toggle ${serviceDeploymentFocus ? "is-active" : ""}`} onClick={() => { setView("detailed"); setClusterExpanded(true); setServiceDeploymentFocus((focused) => !focused); }} aria-pressed={serviceDeploymentFocus}>{serviceDeploymentFocus ? "Cluster focus: exit" : "Cluster focus: Service → Deployment"}</button>}
-        <div className="workspace-toolbar__signal"><span className="signal-dot" />{detectedServices} signals · {analysis.relations.length} relationships</div>
+        {diagramAnalysis?.relations.some((relation) => relation.label === "Selects" && diagramAnalysis.components.some((component) => component.id === relation.source && component.icon === "Service") && diagramAnalysis.components.some((component) => component.id === relation.target && component.icon === "Deployment")) && <button className={`pipeline-toolbar-toggle cluster-focus-toggle ${serviceDeploymentFocus ? "is-active" : ""}`} onClick={() => { setView("detailed"); setClusterExpanded(true); setServiceDeploymentFocus((focused) => !focused); }} aria-pressed={serviceDeploymentFocus}>{serviceDeploymentFocus ? "Cluster focus: exit" : "Cluster focus: Service → Deployment"}</button>}
+        <div className="workspace-toolbar__signal"><span className="signal-dot" />{detectedServices} signals · {diagramAnalysis?.relations.length ?? 0} relationships</div>
+        {shareMessage && <span className="analysis-action-message" role="status">{shareMessage}</span>}
+        <div className="analysis-actions" aria-label="Analysis collaboration controls">
+          <button onClick={() => void onShare()} title="Copy a shareable analysis URL"><Clipboard size={13} /> Share</button>
+          <button onClick={onSaveSettings} title="Save current analysis settings on this device"><Save size={13} /> Save settings</button>
+          <button onClick={onLoadSettings} title="Load saved analysis settings"><Upload size={13} /> Load settings</button>
+        </div>
         <div className="export-actions" aria-label="Diagram export">
           <span><Download size={13} /> Export</span>
           <button onClick={() => void onExport("png")} disabled={Boolean(exporting)}>{exporting === "png" ? <LoaderCircle className="spin" size={13} /> : <FileImage size={13} />} PNG</button>
           <button onClick={() => void onExport("svg")} disabled={Boolean(exporting)}>{exporting === "svg" ? <LoaderCircle className="spin" size={13} /> : <FileType2 size={13} />} SVG</button>
         </div>
       </div>
+
+      <section className="diagram-filters" aria-label="Diagram filters">
+        <div className="diagram-filters__heading"><strong>FILTER EVIDENCED RESOURCES</strong><span>{diagramAnalysis?.components.length ?? 0} visible of {analysis.components.length}</span></div>
+        <label>Environment<select value={environmentFilter} onChange={(event) => { setEnvironmentFilter(event.target.value); setServiceDeploymentFocus(false); }}><option value="all">All environments</option>{availableEnvironments.map((environment) => <option value={environment} key={environment}>{environment}</option>)}</select></label>
+        <label>Namespace<select value={namespaceFilter} onChange={(event) => { setNamespaceFilter(event.target.value); setServiceDeploymentFocus(false); }}><option value="all">All namespaces</option>{availableNamespaces.map((namespace) => <option value={namespace} key={namespace}>{namespace}</option>)}</select></label>
+        {(environmentFilter !== "all" || namespaceFilter !== "all") && <button className="diagram-filters__clear" onClick={() => { setEnvironmentFilter("all"); setNamespaceFilter("all"); }}>Clear filters</button>}
+      </section>
 
       <section className="journey-console" aria-label="Journey trace controls">
         <div className="journey-console__controls" role="group" aria-label="Highlight a repository journey">
