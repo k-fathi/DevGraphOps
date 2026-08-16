@@ -90,6 +90,37 @@ describe("parsePublicRepositoryUrl", () => {
     ]));
   });
 
+  it("prioritizes a Helm Ingress manifest over Chart metadata so a declared user route remains eligible", () => {
+    const selected = candidatePaths([
+      "k8s/ingress/Chart.yaml",
+      "k8s/ingress/values.yaml",
+      "k8s/ingress/templates/ingress.yaml",
+      "k8s/services/front-svc.yml",
+      "k8s/deployments/front-deploy.yml",
+    ]);
+
+    expect(selected.indexOf("k8s/ingress/templates/ingress.yaml")).toBeLessThan(selected.indexOf("k8s/ingress/Chart.yaml"));
+  });
+
+  it("retains multiple Service and Deployment manifests so a multi-service user path is not reduced to one backend", () => {
+    const selected = candidatePaths([
+      ".github/workflows/ci-cd.yml",
+      "terraform/main.tf",
+      "k8s/ingress/templates/ingress.yaml",
+      "k8s/services/back-svc.yml",
+      "k8s/services/db-svc.yml",
+      "k8s/services/front-svc.yml",
+      "k8s/deployments/back-deploy.yml",
+      "k8s/deployments/front-deploy.yml",
+      "k8s/deployments/worker-deploy.yml",
+    ]);
+
+    expect(selected).toEqual(expect.arrayContaining([
+      "k8s/services/front-svc.yml",
+      "k8s/deployments/front-deploy.yml",
+    ]));
+  });
+
   it("retains compact all-resources manifests so declared workload descendants remain analyzable", () => {
     const selected = candidatePaths([
       "docs/values.yaml",

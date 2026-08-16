@@ -201,8 +201,12 @@ function makeEdge(id: string, source: string, target: string, label: string, kin
     dependency: { stroke: "#707070", strokeWidth: 1.35, strokeDasharray: "2 4", animated: false },
   };
   const style = styleByKind[kind];
+  const isUserRoute = source === "user" && target === "cluster" && kind === "traffic";
+  const isManifestShortcut = source === "cicd" && target === "cluster" && label === "updates manifest";
   return {
     id, source, target, type: "step", animated: style.animated, label, data: { kind, evidence }, selectable: false, zIndex: 2,
+    sourceHandle: isManifestShortcut ? "delivery-out" : "out",
+    targetHandle: isUserRoute ? "journey-in" : isManifestShortcut ? "delivery-in" : "in",
     markerEnd: { type: MarkerType.ArrowClosed, color: style.stroke, width: 18, height: 18 },
     style: { stroke: style.stroke, strokeWidth: style.strokeWidth, strokeDasharray: style.strokeDasharray },
     labelStyle: { fill: "#d8d8d8", fontSize: 10, fontWeight: 600 }, labelBgStyle: { fill: "#171717", fillOpacity: 0.96 }, labelBgPadding: [5, 3], labelBgBorderRadius: 2,
@@ -238,7 +242,7 @@ async function calculateDevOpsLayout(items: Array<{ id: string; width: number; h
   const layout = await elk.layout({
     id: "devops-root",
     layoutOptions: {
-      "elk.algorithm": "layered", "elk.direction": "RIGHT", "elk.edgeRouting": "ORTHOGONAL", "elk.spacing.nodeNode": "108", "elk.layered.spacing.nodeNodeBetweenLayers": "156", "elk.padding": "[top=64,left=72,bottom=64,right=72]",
+      "elk.algorithm": "layered", "elk.direction": "RIGHT", "elk.edgeRouting": "ORTHOGONAL", "elk.spacing.nodeNode": "132", "elk.layered.spacing.nodeNodeBetweenLayers": "198", "elk.padding": "[top=72,left=84,bottom=72,right=84]",
     },
     children: items,
     edges: items.slice(0, -1).map((item, index) => ({ id: `elk-${item.id}-${items[index + 1].id}`, sources: [item.id], targets: [items[index + 1].id] })),
@@ -354,6 +358,8 @@ export function buildJourneyDefinitions(analysis: RepositoryAnalysis, nodes: Arc
   const runtimeAvailable = userNodeIds.some((id) => workloadIds.has(id));
 
   const pipelineSteps = orderedPipelineSteps(analysis).filter((step) => known.has(step.id));
+  const declaredPipeline = analysis.components.filter((component) => component.domain === "pipeline" && Boolean(component.evidence));
+  const pipelineSummary: JourneyStep[] = declaredPipeline.length ? [{ id: "cicd", label: `Pipeline · ${declaredPipeline.length} declared stages`, evidence: declaredPipeline[0]?.evidence }] : [];
   const observedDomainSteps = (domain: ArchitectureDomain) => {
     const items = analysis.components.filter((component) => component.domain === domain && known.has(component.id));
     const evidenced = items.filter((component) => Boolean(component.evidence));
@@ -361,10 +367,12 @@ export function buildJourneyDefinitions(analysis: RepositoryAnalysis, nodes: Arc
   };
   const infrastructure = observedDomainSteps("infrastructure");
   const runtime = observedDomainSteps("cluster");
-  const runtimeDeclared = runtime.length > 0;
+  const declaredRuntime = analysis.components.filter((component) => component.domain === "cluster" && Boolean(component.evidence));
+  const runtimeDeclared = declaredRuntime.length > 0;
   const devOpsEdgeIds = edges.filter((edge) => edge.data?.kind === "deployment" && known.has(edge.source) && known.has(edge.target)).map((edge) => edge.id);
   const devOpsNodeIds = Array.from(new Set(["repository", "cicd", ...pipelineSteps.map((step) => step.id), "infrastructure", ...infrastructure.map((step) => step.id), "cluster", ...runtime.map((step) => step.id)].filter((id) => known.has(id))));
-  const devOpsSteps = [labels.get("repository")!, ...pipelineSteps, ...infrastructure, ...runtime];
+  const clusterSummary: JourneyStep[] = runtimeDeclared && known.has("cluster") ? [{ id: "cluster", label: "Kubernetes Cluster", evidence: declaredRuntime[0]?.evidence }] : [];
+  const devOpsSteps = [labels.get("repository")!, ...pipelineSummary, ...pipelineSteps, ...infrastructure, ...clusterSummary, ...runtime];
 
   return [
     { id: "user", title: "User Journey", summary: !runtimeAvailable ? "No application runtime or public-access path is declared in the analyzed files, so a user journey cannot be inferred." : userPathIsDeclared ? "Trace the declared request path from user access to the application runtime." : "No DNS, gateway, load balancer, or ingress path is declared in the analyzed files. The external path is shown as unresolved rather than inferred.", nodeIds: userNodeIds, edgeIds: userEdgeIds, steps: userSteps },
@@ -380,7 +388,7 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
   const devOpsGroups = groups.filter((group) => group.id !== "user-path");
   const devOpsItems = [{ id: "repository", width: LEAF_WIDTH + 20, height: LEAF_HEIGHT }, ...devOpsGroups.map((group) => ({ id: group.id, ...sizes[group.id]! }))];
   const positions = await calculateDevOpsLayout(devOpsItems);
-  const devOpsBaseY = 370;
+  const devOpsBaseY = 358;
   const userWidth = sizes["user-path"]?.width ?? 172;
   const lastItem = devOpsItems.at(-1)!;
   const terminalX = positions[lastItem.id].x + lastItem.width + 110;
@@ -408,8 +416,13 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
 
   const edges: ArchitectureEdge[] = [];
 
+  const groupForComponent = new Map(analysis.components.map((component) => [component.id, component.domain === "pipeline" ? "cicd" : component.domain === "infrastructure" ? "infrastructure" : component.domain === "cluster" ? "cluster" : component.domain === "user" ? "user-path" : component.id]));
   for (const relation of analysis.relations) {
-    if (knownNodeIds.has(relation.source) && knownNodeIds.has(relation.target) && relation.evidence) edges.push(makeEdge(`extracted-${relation.id}`, relation.source, relation.target, relation.label, relation.kind, relation.evidence));
+    if (!relation.evidence) continue;
+    const source = knownNodeIds.has(relation.source) ? relation.source : groupForComponent.get(relation.source);
+    const target = knownNodeIds.has(relation.target) ? relation.target : groupForComponent.get(relation.target);
+    if (!source || !target || source === target || !knownNodeIds.has(source) || !knownNodeIds.has(target)) continue;
+    edges.push(makeEdge(`extracted-${relation.id}`, source, target, relation.label, relation.kind, relation.evidence));
   }
 
   if (clusterExpanded && knownNodeIds.has("cluster")) {
@@ -423,5 +436,5 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
     edges.push(makeEdge("devops-engineer-pipeline", "devops-engineer", pipelineTarget, "operates", "deployment", pipeline[0].evidence));
   }
 
-  return { nodes, edges: Array.from(new Map(edges.map((edge) => [edge.id, edge])).values()) };
+  return { nodes, edges: Array.from(new Map(edges.map((edge) => [`${edge.source}-${edge.target}-${String(edge.label ?? "")}`, edge])).values()) };
 }

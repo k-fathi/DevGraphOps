@@ -113,7 +113,7 @@ function environmentFromRecord(record: JsonRecord | undefined): string | undefin
 
 // Conservative limits keep public, unauthenticated provider APIs responsive while still surfacing core deployment evidence.
 const MAX_TREE_ENTRIES = 800;
-const MAX_CONFIG_FILES = 14;
+const MAX_CONFIG_FILES = 18;
 const MAX_FILE_BYTES = 160_000;
 const MAX_EVIDENCE_SNIPPET_CHARS = 12_000;
 const providerHeaders = { "User-Agent": "Repogram/1.0 (public repository analysis)" };
@@ -344,8 +344,9 @@ export function candidatePaths(paths: string[]) {
   };
   const kubernetes = candidates.filter((path) => /(deployment|service|ingress|statefulset|daemonset|replicaset|pod|secret|config-?map|namespace|hpa|external-?secret|helm|chart\.yaml|values\.ya?ml|k8s|kubernetes|manifest|deployed-all|all-resources)/i.test(path)).sort((a, b) => kubernetesPriority(a).localeCompare(kubernetesPriority(b)));
   const kubernetesFamilies = [/ingress|gateway/i, /services?\//i, /deployments?\//i, /statefulsets?\//i, /config-?maps?\//i, /secrets?\//i, /hpa|horizontalpodautoscaler/i, /eso|external-?secret/i, /namespaces?\//i, /replicasets?\//i, /daemonsets?\//i, /pods?\//i];
+  const manifestPriority = (path: string) => /(?:^|\/)templates\/.*\.ya?ml$/i.test(path) || /(?:^|\/)(?!chart|values)[^/]+\.ya?ml$/i.test(path) && !/(?:chart|values)\.ya?ml$/i.test(path) ? 0 : 1;
   const representativeKubernetes = [
-    ...kubernetesFamilies.flatMap((family, index) => kubernetes.filter((path) => family.test(path)).slice(0, index === 4 ? 2 : 1)),
+    ...kubernetesFamilies.flatMap((family, index) => kubernetes.filter((path) => family.test(path)).sort((left, right) => manifestPriority(left) - manifestPriority(right) || left.localeCompare(right)).slice(0, index === 1 || index === 2 || index === 4 ? 3 : 1)),
     ...kubernetes,
   ];
   const terraform = candidates.filter((path) => /\.tf$/i.test(path)).sort((left, right) => {
@@ -767,6 +768,21 @@ function classifyError(provider: RepositoryProvider, error: unknown) {
   return "The public repository data could not be reached.";
 }
 
+function crossSectionEvidenceRelations(pipeline: ExtractedComponent[], terraform: ExtractedComponent[], kubernetes: ExtractedComponent[], files: ContentFile[]): ArchitectureRelation[] {
+  const relations: ArchitectureRelation[] = [];
+  const terraformStage = pipeline.filter((stage) => stage.tools?.includes("Terraform") && stage.evidence);
+  if (terraform.length) {
+    for (const stage of terraformStage) {
+      relations.push({ id: `pipeline-infrastructure-${stage.id}`, source: stage.id, target: "infrastructure", label: "validates infrastructure", kind: "deployment", evidence: stage.evidence });
+    }
+  }
+  const eksEvidence = files.find((file) => file.path.toLowerCase().endsWith(".tf") && /aws_eks_cluster|module\s+"eks"|module\s+"kubernetes"/i.test(file.content));
+  if (terraform.length && kubernetes.length && eksEvidence) {
+    relations.push({ id: `infrastructure-cluster-${slug(eksEvidence.path)}`, source: "infrastructure", target: "cluster", label: "provisions Kubernetes", kind: "deployment", evidence: eksEvidence.path });
+  }
+  return relations;
+}
+
 export async function analyzePublicRepository(rawUrl: string): Promise<RepositoryAnalysis> {
   const parsed = parsePublicRepositoryUrl(rawUrl);
   let descriptor: RepositoryDescriptor;
@@ -792,7 +808,7 @@ export async function analyzePublicRepository(rawUrl: string): Promise<Repositor
   const primaryPipelineIds = new Set(primaryPipeline.map((component) => component.id));
   const primaryPipelineRelations = yaml.pipelineRelations.filter((relation) => primaryPipelineIds.has(relation.source) && primaryPipelineIds.has(relation.target));
   const components = uniqueById([...buildBaseComponents(), ...pipelineDetails.components.slice(0, 12), ...primaryPipeline, ...terraform.components.slice(0, 12), ...prioritizeKubernetesComponents(yaml.components, yaml.relations).slice(0, 24)]);
-  const relations = uniqueRelations([...pipelineDetails.relations, ...primaryPipelineRelations, ...terraform.relations, ...yaml.relations]);
+  const relations = uniqueRelations([...pipelineDetails.relations, ...primaryPipelineRelations, ...terraform.relations, ...yaml.relations, ...crossSectionEvidenceRelations(primaryPipeline, terraform.components, yaml.components, contents)]);
   const pipelineExecutionStatuses = parsed.provider === "github" && signals.githubActions ? await getGitHubPipelineExecutionStatuses(repository) : [];
 
   return {

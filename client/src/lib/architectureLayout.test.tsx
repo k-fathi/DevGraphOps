@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ContainerGroupNode, DevopsServiceNode } from "@/components/architecture/nodes";
-import { buildKubernetesPlan, buildPipelinePlan } from "./architectureLayout";
+import { buildArchitectureLayout, buildJourneyDefinitions, buildKubernetesPlan, buildPipelinePlan } from "./architectureLayout";
 
 describe("expandable pipeline planning", () => {
   const components = [
@@ -182,5 +182,41 @@ describe("expandable Kubernetes topology", () => {
 
     await user.click(screen.getByRole("button", { name: "Expand 1 children" }));
     expect(onToggleWorkload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DEPI-GP cross-section continuity", () => {
+  it("keeps evidence-backed delivery bridges visible when Pipeline and Cluster are collapsed", async () => {
+    const analysis = {
+      repository: { provider: "github" as const, owner: "k-fathi", repo: "DEPI-GP", branch: "main", url: "https://github.com/k-fathi/DEPI-GP" },
+      signals: {} as any,
+      fileCount: 3,
+      detectedFiles: [".github/workflows/ci-cd.yml", "terraform/modules/eks/main.tf", "k8s/deployments/back-deploy.yml"],
+      components: [
+        { id: "user", label: "End User", icon: "Users", domain: "user" as const },
+        { id: "terraform-validate", label: "Job: terraform-validate", icon: "GitHub Actions", domain: "pipeline" as const, evidence: ".github/workflows/ci-cd.yml", tools: ["Terraform"] },
+        { id: "tf-eks", label: "aws eks cluster: eks", icon: "AWS", domain: "infrastructure" as const, evidence: "terraform/modules/eks/main.tf" },
+        { id: "deployment-back", label: "Deployment: backend", icon: "Deployment", domain: "cluster" as const, evidence: "k8s/deployments/back-deploy.yml" },
+        { id: "deployment-front", label: "Deployment: frontend", icon: "Deployment", domain: "cluster" as const, evidence: "k8s/deployments/front-deploy.yml" },
+      ],
+      relations: [
+        { id: "manifest-back", source: "terraform-validate", target: "deployment-back", label: "updates manifest", kind: "deployment" as const, evidence: ".github/workflows/ci-cd.yml" },
+        { id: "manifest-front", source: "terraform-validate", target: "deployment-front", label: "updates manifest", kind: "deployment" as const, evidence: ".github/workflows/ci-cd.yml" },
+        { id: "pipeline-infrastructure", source: "terraform-validate", target: "infrastructure", label: "validates infrastructure", kind: "deployment" as const, evidence: ".github/workflows/ci-cd.yml" },
+        { id: "infrastructure-cluster", source: "infrastructure", target: "cluster", label: "provisions Kubernetes", kind: "deployment" as const, evidence: "terraform/modules/eks/main.tf" },
+      ],
+      evidenceSnippets: [],
+    };
+    const layout = await buildArchitectureLayout(analysis as any, "detailed", false, false, false);
+    const bridgeEdges = new Map(layout.edges.map((edge) => [edge.label, edge]));
+
+    expect(bridgeEdges.get("validates infrastructure")).toMatchObject({ source: "cicd", target: "infrastructure" });
+    expect(bridgeEdges.get("provisions Kubernetes")).toMatchObject({ source: "infrastructure", target: "cluster" });
+    expect(layout.edges.filter((edge) => edge.label === "updates manifest")).toHaveLength(1);
+    const devOpsJourney = buildJourneyDefinitions(analysis as any, layout.nodes, layout.edges).find((journey) => journey.id === "devops")!;
+    expect(devOpsJourney.steps.map((step) => step.label)).toEqual(expect.arrayContaining(["Pipeline · 1 declared stages", "Kubernetes Cluster"]));
+    const byId = new Map(layout.nodes.map((node) => [node.id, node]));
+    expect(byId.get("cicd")!.position.x).toBeLessThan(byId.get("infrastructure")!.position.x);
+    expect(byId.get("infrastructure")!.position.x).toBeLessThan(byId.get("cluster")!.position.x);
   });
 });

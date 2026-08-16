@@ -69,7 +69,9 @@ export default function DevOpsArchitectureCanvas() {
     if (!analysis) return null;
     const visibleComponents = analysis.components.filter((component) => (environmentFilter === "all" || component.environment === environmentFilter) && (namespaceFilter === "all" || component.namespace === namespaceFilter));
     const visibleIds = new Set(visibleComponents.map((component) => component.id));
-    const visibleRelations = analysis.relations.filter((relation) => visibleIds.has(relation.source) && visibleIds.has(relation.target) || relation.source === "user" && visibleIds.has(relation.target));
+    const visibleGroups = new Set(visibleComponents.map((component) => component.domain === "pipeline" ? "cicd" : component.domain === "infrastructure" ? "infrastructure" : component.domain === "cluster" ? "cluster" : component.domain === "user" ? "user-path" : component.id));
+    const endpointIsVisible = (endpoint: string) => visibleIds.has(endpoint) || visibleGroups.has(endpoint);
+    const visibleRelations = analysis.relations.filter((relation) => endpointIsVisible(relation.source) && endpointIsVisible(relation.target));
     return { ...analysis, components: visibleComponents, relations: visibleRelations };
   }, [analysis, environmentFilter, namespaceFilter]);
   const availableEnvironments = useMemo(() => Array.from(new Set((analysis?.components ?? []).map((component) => component.environment).filter((value): value is string => Boolean(value)))).sort(), [analysis]);
@@ -188,7 +190,9 @@ export default function DevOpsArchitectureCanvas() {
 
   const selectJourney = useCallback((nextJourney: JourneyMode) => {
     setJourneyMode(nextJourney);
-    if (nextJourney !== "overview") setView("detailed");
+    if (nextJourney === "overview") return;
+    setView("detailed");
+    setClusterExpanded(true);
   }, []);
 
   const onJourneyNodeClick = useCallback((_event: React.MouseEvent, node: ArchitectureNode) => {
@@ -380,7 +384,7 @@ export default function DevOpsArchitectureCanvas() {
           <button className={journeyMode === "devops" ? "is-active" : ""} onClick={() => selectJourney("devops")}>Trace DevOps Journey</button>
         </div>
         <div className="journey-console__explanation">{activeJourney ? activeJourney.summary : "Select a journey to dim unrelated services and reveal its exact ordered route."}</div>
-        {showPipelineDetails && pipelineFlow.length > 0 && <section className={`pipeline-execution-map ${pipelineClosing ? "pipeline-execution-map--closing" : ""}`} aria-label="Expanded pipeline execution map">
+        {(showPipelineDetails || journeyMode === "devops") && pipelineFlow.length > 0 && <section className={`pipeline-execution-map ${pipelineClosing ? "pipeline-execution-map--closing" : ""}`} aria-label="Expanded pipeline execution map">
           <header><strong>PIPELINE EXECUTION MAP</strong><span>Read left to right. Each column is an evidenced hand-off; stacked cards run in parallel.</span></header>
           <div className="pipeline-status-legend" aria-label="Pipeline execution status legend"><span className="pipeline-execution-map__status pipeline-execution-map__status--success">Passed</span><span className="pipeline-execution-map__status pipeline-execution-map__status--running">Running</span><span className="pipeline-execution-map__status pipeline-execution-map__status--failed">Failed</span><span className="pipeline-execution-map__status pipeline-execution-map__status--queued">Queued</span><PipelineStatusScope provider={analysis.repository.provider} /></div>
           <div className="pipeline-execution-map__phases">{pipelineFlow.map((stages, index) => <React.Fragment key={`phase-${index}`}><ol className="pipeline-execution-map__phase"><li className="pipeline-execution-map__phase-label">{index === 0 ? "START" : `HAND-OFF ${index}`}{stages.length > 1 && <em>PARALLEL</em>}</li>{stages.map((stage) => <li key={stage.id}><span>{stage.label}</span><i className={`pipeline-execution-map__status pipeline-execution-map__status--${stage.status?.state ?? "neutral"}`} title={stage.status?.reportedAt ? `Reported ${new Date(stage.status.reportedAt).toLocaleString()}` : "No public execution result was reported"}>{executionStatusLabel(stage.status?.state ?? "neutral")}</i></li>)}</ol>{index < pipelineFlow.length - 1 && <span className="pipeline-execution-map__arrow" aria-hidden="true">→</span>}</React.Fragment>)}</div>

@@ -107,6 +107,26 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     expect(screen.getByRole("button", { name: "Cluster focus: exit" })).toBeTruthy();
   });
 
+  it("opens the Cluster when tracing a User Journey so declared runtime nodes can be highlighted", async () => {
+    const user = userEvent.setup();
+    render(<DevOpsArchitectureCanvas />);
+
+    await user.click(await screen.findByRole("button", { name: "Trace User Journey" }));
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(analysis, "detailed", false, false, true, [], []));
+  });
+
+  it("opens the Cluster and reveals the execution map without flooding the Canvas when tracing the DevOps Journey", async () => {
+    const user = userEvent.setup();
+    analyzeRepositoryMock.mockResolvedValue({
+      ...analysis,
+      components: [...analysis.components, { id: "deploy", label: "Job: deploy", icon: "GitHub Actions", domain: "pipeline" as const, evidence: ".github/workflows/ci.yml" }],
+    });
+    render(<DevOpsArchitectureCanvas />);
+
+    await user.click(await screen.findByRole("button", { name: "Trace DevOps Journey" }));
+    await waitFor(() => expect(layoutMock).toHaveBeenCalledWith(expect.anything(), "detailed", false, false, true, [], []));
+  });
+
   it("explains that live execution status is currently GitHub Actions-only for other providers", async () => {
     const { container } = render(<PipelineStatusScope provider="gitlab" />);
     expect(container.textContent).toContain("Live execution status is currently available for public GitHub Actions repositories only.");

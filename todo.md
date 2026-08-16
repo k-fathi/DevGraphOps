@@ -215,3 +215,11 @@
 - [x] Add a namespace filter that scopes the diagram to a declared namespace while retaining its necessary evidenced relationship context.
 - [x] Add filter, settings, and share-link regression tests; validate the interaction flow and production build.
 - [x] Save a checkpoint and push the completed collaboration enhancements to `k-fathi/DevGraphOps` main.
+
+## DEPI-GP Continuous Visual Regression
+- [x] Use `github.com/k-fathi/DEPI-GP` as the default visual-regression repository for layout and journey verification.
+- [x] Capture and diagnose the live DEPI-GP diagram for edge overlap, disconnected sections, and incomplete User Journey continuity.
+- [x] Redesign cross-section routing so Pipeline, Infrastructure, Kubernetes, and the evidenced live application form one clear DevOps flow.
+- [x] Clarify the evidenced User Journey as a continuous, directional route through the live entry path without inventing missing resources.
+- [x] Add DEPI-GP-focused layout and journey regression tests covering non-overlapping section continuity.
+- [ ] Iterate screenshot review, validate the production build, then checkpoint and push the layout refinement to `k-fathi/DevGraphOps` main.
