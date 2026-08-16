@@ -267,3 +267,9 @@
 - [x] Prevent unrelated repository-level tools from being copied into every stage card.
 - [x] Add regression tests for Docker, Terraform, Ansible, GitHub Actions, and mixed-tool stages using evidence-backed classifications.
 - [x] Run the full suite and build, inspect DEPI-GP cards, checkpoint, and push to `k-fathi/DevGraphOps/main`.
+
+## Stage Icon Consistency Audit
+- [x] Define a strict audit that compares every rendered stage component.icon with its resolved primary icon identity.
+- [x] Reject mismatched stages from the diagram instead of rendering an incorrect logo.
+- [x] Add regression tests for matching icons, mismatches, and unresolved fallback cases.
+- [x] Run tests and build, checkpoint, and push the audit update to `k-fathi/DevGraphOps/main`.

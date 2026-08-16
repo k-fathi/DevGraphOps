@@ -5,11 +5,12 @@
 import * as simpleIcons from "simple-icons";
 
 export type IconResolution =
-  | { kind: "image"; src: string; source: "local" | "simple-icons"; label: string }
+  | { kind: "image"; src: string; source: "local" | "simple-icons"; label: string; canonicalKey: string }
   | {
       kind: "external-missing";
       source: "external-missing";
       label: string;
+      canonicalKey: string;
       instructions: string;
       sources: string[];
     };
@@ -84,7 +85,7 @@ export function resolveIcon(label: string): IconResolution {
   const local = localIconAssets[key];
 
   if (local) {
-    return { kind: "image", src: local, source: "local", label };
+    return { kind: "image", src: local, source: "local", label, canonicalKey: key };
   }
 
   const libraryKey = simpleIconNames[key];
@@ -98,6 +99,7 @@ export function resolveIcon(label: string): IconResolution {
       src: makeSvgDataUri(libraryIcon.path, libraryIcon.hex, label),
       source: "simple-icons",
       label,
+      canonicalKey: key,
     };
   }
 
@@ -105,9 +107,15 @@ export function resolveIcon(label: string): IconResolution {
     kind: "external-missing",
     source: "external-missing",
     label,
+    canonicalKey: key,
     instructions: `No precise ${label} SVG is bundled. Add an approved SVG to the local icon catalog before publishing.`,
     sources: ["https://thesvg.org/collection/", "https://dashboardicons.com"],
   };
+}
+
+export function auditIconIdentity(componentIcon: string, resolution: IconResolution): boolean {
+  const expectedKey = componentIcon.trim().toLowerCase();
+  return resolution.canonicalKey === expectedKey && resolution.label.trim().toLowerCase() === expectedKey;
 }
 
 export const iconResolutionOrder = [

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveIcon } from "./iconResolver";
+import { auditIconIdentity, resolveIcon } from "./iconResolver";
 
 describe("precise technology icon resolution", () => {
   it("resolves Docker to the Docker library mark rather than Docker Hub", () => {
@@ -13,6 +13,13 @@ describe("precise technology icon resolution", () => {
     expect(dockerHub.source).toBe("local");
     expect(dockerHub.label).toBe("Docker Hub");
     expect(docker.src).not.toBe(dockerHub.src);
+  });
+
+  it("rejects a resolved logo whose canonical identity differs from component.icon", () => {
+    const docker = resolveIcon("Docker");
+    expect(auditIconIdentity("Docker", docker)).toBe(true);
+    expect(auditIconIdentity("Terraform", docker)).toBe(false);
+    expect(auditIconIdentity("Docker Hub", docker)).toBe(false);
   });
 
   it("keeps Terraform as a separate technology icon", () => {

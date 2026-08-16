@@ -5,7 +5,7 @@
 import React from "react";
 import { ChevronDown, ChevronRight, CircleAlert, ExternalLink } from "lucide-react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { resolveIcon } from "@/lib/iconResolver";
+import { auditIconIdentity, resolveIcon } from "@/lib/iconResolver";
 import type { PipelineExecutionState } from "@/lib/repositoryParser";
 
 export type ContainerNodeData = { label: string; color: string; collapsed: boolean; childCount: number; isPipeline?: boolean; providerIcon?: string; pipelineExpanded?: boolean; entryLabels?: string[]; terminalLabels?: string[]; parallelColumnCount?: number; independentCount?: number; onTogglePipeline?: () => void; isCluster?: boolean; clusterExpanded?: boolean; namespaceCount?: number; unscopedCount?: number; onToggleCluster?: () => void };
@@ -15,8 +15,11 @@ type ServiceNode = Node<ServiceNodeData, "devopsService" | "pipelineStep">;
 
 function NodeIcon({ icon }: { icon: string }) {
   const resolution = resolveIcon(icon);
-  if (resolution.kind === "image") return <img className="architecture-node__icon" src={resolution.src} alt="" aria-hidden="true" />;
-  return <div className="architecture-node__missing" title={`${resolution.instructions} Sources: ${resolution.sources.join(" · ")}`} aria-label={resolution.instructions}><CircleAlert size={24} strokeWidth={1.7} /><ExternalLink className="architecture-node__missing-mark" size={11} /></div>;
+  const isAudited = auditIconIdentity(icon, resolution);
+  if (resolution.kind === "image" && isAudited) return <img className="architecture-node__icon" src={resolution.src} alt="" aria-hidden="true" data-icon-identity={resolution.canonicalKey} />;
+  const message = !isAudited ? `Rejected icon mismatch for ${icon}; the stage was not given an unverified logo.` : resolution.kind === "external-missing" ? resolution.instructions : `Icon audit rejected ${icon}.`;
+  const sources = resolution.kind === "external-missing" ? ` Sources: ${resolution.sources.join(" · ")}` : "";
+  return <div className="architecture-node__missing" title={`${message}${sources}`} aria-label={message}><CircleAlert size={24} strokeWidth={1.7} /><ExternalLink className="architecture-node__missing-mark" size={11} /></div>;
 }
 
 function ToolIcon({ tool }: { tool: string }) {
