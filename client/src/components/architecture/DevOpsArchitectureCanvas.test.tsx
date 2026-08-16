@@ -23,7 +23,7 @@ vi.mock("@xyflow/react", () => ({
   Background: () => null,
   BackgroundVariant: { Dots: "dots" },
   Controls: () => null,
-  ReactFlow: ({ nodes, edges, onNodeClick, onEdgeClick }: any) => <div><button onClick={() => onNodeClick({}, nodes[0])}>{nodes[0]?.data.label}</button><button onClick={() => onEdgeClick({}, edges[0])}>Canvas edge</button></div>,
+  ReactFlow: ({ nodes, edges, onNodeClick, onEdgeClick, onNodeMouseEnter, onEdgeMouseLeave, onEdgeMouseEnter, onNodeMouseLeave }: any) => <div><button onClick={() => onNodeClick({}, nodes[0])} onMouseEnter={() => onNodeMouseEnter?.({}, nodes[0])} onMouseLeave={() => onNodeMouseLeave?.()}>{nodes[0]?.data.label}</button><button onClick={() => onEdgeClick({}, edges[0])} onMouseEnter={() => onEdgeMouseEnter?.({}, edges[0])} onMouseLeave={() => onEdgeMouseLeave?.()}>Canvas edge</button></div>,
   useNodesState: (initial: any[]) => { const [value, setValue] = useState(initial); return [value, setValue, vi.fn()]; },
   useEdgesState: (initial: any[]) => { const [value, setValue] = useState(initial); return [value, setValue, vi.fn()]; },
 }));
@@ -158,6 +158,21 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     expect(screen.getByRole("option", { name: "prod" })).toBeTruthy();
     await user.selectOptions(namespace, "prod");
     expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
+  });
+
+  it("supports explicit zoom controls and displays evidence hover guidance", async () => {
+    const user = userEvent.setup();
+    render(<DevOpsArchitectureCanvas />);
+    await screen.findByRole("button", { name: "Zoom in" });
+    expect(screen.getByText("100%")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(screen.getByText("110%")).toBeTruthy();
+    await user.hover(screen.getByRole("button", { name: "Service: app" }));
+    expect((await screen.findByRole("status")).textContent).toContain("Service: app · Evidence: k8s/service.yml");
+    await user.hover(screen.getByRole("button", { name: "Canvas edge" }));
+    expect((await screen.findByRole("status")).textContent).toContain("Selects · k8s/service.yml");
+    await user.unhover(screen.getByRole("button", { name: "Canvas edge" }));
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("copies a share link and persists the current analysis settings", async () => {

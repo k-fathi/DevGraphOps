@@ -263,6 +263,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
 .architecture-canvas .react-flow__edge path { filter: drop-shadow(0 0 1px rgba(220, 235, 148, 0.4)); vector-effect: non-scaling-stroke; }
 .architecture-canvas .react-flow__edge-text { font: 700 9px "IBM Plex Mono", monospace; letter-spacing: 0.02em; }
 .architecture-canvas .react-flow__edge-textbg { rx: 2; ry: 2; stroke: #383838; stroke-width: 0.6; }
+.canvas-navigation { position: absolute; right: 12px; bottom: 12px; z-index: 4; display: inline-flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid #505050; background: rgba(17,17,17,0.96); color: #d8d8d8; font: 700 9px/1 "IBM Plex Mono", monospace; }
+.canvas-navigation button { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid #5f5f5f; background: #242424; color: #d8d8d8; cursor: pointer; }
+.canvas-navigation button:hover { border-color: #9abb45; background: #303b1c; color: #f0f5d2; }
+.canvas-navigation button:active { transform: scale(0.96); }
+.canvas-navigation span { min-width: 38px; text-align: center; color: #c8d88e; }
+.canvas-hover-hint { position: absolute; left: 50%; bottom: 12px; z-index: 3; max-width: min(520px, calc(100% - 220px)); transform: translateX(-50%); overflow: hidden; padding: 7px 10px; border: 1px solid #666; background: rgba(17,17,17,0.96); color: #ededed; font: 600 9px/1.2 "IBM Plex Mono", monospace; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
 .canvas-legend { position: absolute; left: 12px; bottom: 12px; z-index: 3; display: flex; gap: 14px; padding: 8px 9px; border: 1px solid #505050; background: rgba(17,17,17,0.95); color: #c0c0c0; font: 500 9px/1 "IBM Plex Mono", monospace; }
 .canvas-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend-line { width: 18px; height: 0; border-top: 2px solid; }

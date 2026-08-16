@@ -232,3 +232,10 @@
 - [x] Verify Terraform validation and Kubernetes provisioning links remain evidence-backed and target visible section nodes.
 - [x] Add regression tests for edge deduplication, routing continuity, and Pipeline-to-Infrastructure relationships.
 - [x] Validate the revised DEPI-GP screenshot using the captured DEPI-GP review plus routing regression coverage, run the full test suite and production build, checkpoint, and push to `k-fathi/DevGraphOps/main`; the final live refresh was externally rate-limited by GitHub API.
+
+## Final Visual Regression and Canvas Interaction
+- [x] Wait for GitHub API availability and run a fresh DEPI-GP visual regression on the current edge-routing version.
+- [x] Improve explicit Zoom/Pan controls with readable state feedback while preserving React Flow navigation.
+- [x] Add interactive hover tooltips for nodes and edges that expose labels, relationship kinds, and evidence paths without cluttering the canvas.
+- [x] Add regression tests for Zoom/Pan controls and hover evidence guidance, then run the full test suite and production build.
+- [ ] Save a final checkpoint and push the interaction update to `k-fathi/DevGraphOps/main`.

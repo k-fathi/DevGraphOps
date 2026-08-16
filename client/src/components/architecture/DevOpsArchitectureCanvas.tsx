@@ -3,7 +3,7 @@
  * and limited olive, amber, and pink functional signals in place of blue or neon accents.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Clipboard, Download, FileCode2, FileImage, FileType2, GitBranch, LoaderCircle, ScanSearch, Save, Upload } from "lucide-react";
+import { AlertCircle, Clipboard, Download, FileCode2, FileImage, FileType2, GitBranch, LoaderCircle, Maximize2, Minus, Plus, ScanSearch, Save, Upload } from "lucide-react";
 import { toPng, toSvg } from "html-to-image";
 import {
   Background,
@@ -46,6 +46,8 @@ export default function DevOpsArchitectureCanvas() {
   const pendingPreferences = useRef<Partial<AnalysisPreferences> | null>(null);
   const [journeys, setJourneys] = useState<JourneyDefinition[]>([]);
   const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection | null>(null);
+  const [hoverHint, setHoverHint] = useState("");
+  const [zoomPercent, setZoomPercent] = useState(100);
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<ArchitectureEdge>([]);
   const [flow, setFlow] = useState<ReactFlowInstance<ArchitectureNode, ArchitectureEdge> | null>(null);
@@ -412,7 +414,12 @@ export default function DevOpsArchitectureCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={onJourneyNodeClick}
+          onNodeMouseEnter={(_event, node) => { const evidence = "evidence" in node.data ? node.data.evidence : undefined; setHoverHint(`${node.data.label}${evidence ? ` · Evidence: ${evidence}` : ""}`); }}
+          onNodeMouseLeave={() => setHoverHint("")}
+          onEdgeMouseEnter={(_event, edge) => setHoverHint(`${String(edge.label ?? "Relationship")} · ${edge.data?.evidence ?? "Evidence path not retained"}`)}
+          onEdgeMouseLeave={() => setHoverHint("")}
           onEdgeClick={(_event, edge) => { const selection = selectRelationshipEvidence(edge.data?.evidence, edge.source, edge.target, String(edge.label ?? "Relationship evidence")); if (selection) setEvidenceSelection(selection); }}
+          onMove={(_event, viewport) => setZoomPercent(Math.round(viewport.zoom * 100))}
           onInit={setFlow}
           fitView
           minZoom={0.2}
@@ -426,6 +433,13 @@ export default function DevOpsArchitectureCanvas() {
           <Background variant={BackgroundVariant.Dots} gap={20} size={1.1} color="#2d2d2d" />
           <Controls position="bottom-right" showInteractive={false} />
         </ReactFlow>
+        <div className="canvas-navigation" aria-label="Canvas navigation tools">
+          <button type="button" onClick={() => { flow?.zoomOut(); setZoomPercent((value) => Math.max(20, value - 10)); }} title="Zoom out" aria-label="Zoom out"><Minus size={13} /></button>
+          <span aria-live="polite">{zoomPercent}%</span>
+          <button type="button" onClick={() => { flow?.zoomIn(); setZoomPercent((value) => Math.min(160, value + 10)); }} title="Zoom in" aria-label="Zoom in"><Plus size={13} /></button>
+          <button type="button" onClick={() => { flow?.fitView({ padding: 0.13, duration: 220 }); setZoomPercent(100); }} title="Fit diagram to view" aria-label="Fit diagram to view"><Maximize2 size={13} /></button>
+        </div>
+        {hoverHint && <div className="canvas-hover-hint" role="status">{hoverHint}</div>}
         <div className="canvas-legend" aria-label="Flow legend">
           <span><i className="legend-line legend-line--traffic" /> User traffic</span>
           <span><i className="legend-line legend-line--deploy" /> DevOps delivery</span>
