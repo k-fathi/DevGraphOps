@@ -255,11 +255,11 @@
 - [x] Verify DEPI-GP visually, run tests and build, checkpoint, and push the update to `k-fathi/DevGraphOps/main`.
 
 ## Journey Animation, Edge Tooltips, and Reset View
-- [ ] Add a reduced-motion-safe animated stroke for the active User Journey route.
-- [ ] Expand edge hover tooltips with clear source and destination node details plus relationship evidence.
-- [ ] Add a Reset View control that clears journey, focus, expansion, filters, and restores Bottom lanes.
-- [ ] Add regression tests for animation classes, detailed edge tooltip content, and Reset View behavior.
-- [ ] Run the full test suite and build, verify the live UI, checkpoint, and push to `k-fathi/DevGraphOps/main`.
+- [x] Add a reduced-motion-safe animated stroke for the active User Journey route.
+- [x] Expand edge hover tooltips with clear source and destination node details plus relationship evidence.
+- [x] Add a Reset View control that clears journey, focus, expansion, filters, and restores Bottom lanes.
+- [x] Add regression tests for animation classes, detailed edge tooltip content, and Reset View behavior.
+- [x] Run the full test suite and build, verify the live UI, checkpoint, and push to `k-fathi/DevGraphOps/main`.
 
 ## Primary Stage Icons and Supporting Tools
 - [x] Trace why Docker stage cards can receive Terraform or unrelated icons as their primary icon.
