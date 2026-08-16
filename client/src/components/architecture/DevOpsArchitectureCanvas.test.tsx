@@ -178,9 +178,20 @@ describe("DevOpsArchitectureCanvas evidence interactions", () => {
     await user.hover(screen.getByRole("button", { name: "Service: app" }));
     expect((await screen.findByRole("status")).textContent).toContain("Service: app · Evidence: k8s/service.yml");
     await user.hover(screen.getByRole("button", { name: "Canvas edge" }));
-    expect((await screen.findByRole("status")).textContent).toContain("Selects · k8s/service.yml");
+    expect((await screen.findByRole("status")).textContent).toContain("service → deployment · Selects · Evidence: k8s/service.yml");
     await user.unhover(screen.getByRole("button", { name: "Canvas edge" }));
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("resets journey, filters, expansions, and arrow lanes to the default view", async () => {
+    const user = userEvent.setup();
+    render(<DevOpsArchitectureCanvas />);
+    await user.selectOptions(await screen.findByLabelText("Arrow lanes"), "side");
+    await user.click(screen.getByRole("button", { name: "Trace User Journey" }));
+    await user.click(screen.getByRole("button", { name: "Reset view" }));
+    expect(screen.getByRole("button", { name: "Architecture overview" }).className).toContain("is-active");
+    expect((screen.getByLabelText("Arrow lanes") as HTMLSelectElement).value).toBe("bottom");
+    expect(screen.getByRole("status").textContent).toContain("View reset to defaults");
   });
 
   it("copies a share link and persists the current analysis settings", async () => {

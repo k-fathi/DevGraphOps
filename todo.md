@@ -253,3 +253,17 @@
 - [x] Improve edge hover styling so the hovered relationship and its route become visually prominent.
 - [x] Add regression tests for top routing, routing mode persistence, and hover highlighting.
 - [x] Verify DEPI-GP visually, run tests and build, checkpoint, and push the update to `k-fathi/DevGraphOps/main`.
+
+## Journey Animation, Edge Tooltips, and Reset View
+- [ ] Add a reduced-motion-safe animated stroke for the active User Journey route.
+- [ ] Expand edge hover tooltips with clear source and destination node details plus relationship evidence.
+- [ ] Add a Reset View control that clears journey, focus, expansion, filters, and restores Bottom lanes.
+- [ ] Add regression tests for animation classes, detailed edge tooltip content, and Reset View behavior.
+- [ ] Run the full test suite and build, verify the live UI, checkpoint, and push to `k-fathi/DevGraphOps/main`.
+
+## Primary Stage Icons and Supporting Tools
+- [x] Trace why Docker stage cards can receive Terraform or unrelated icons as their primary icon.
+- [x] Ensure the primary card icon is selected from the stage technology and supporting tools remain secondary evidence-linked tools.
+- [x] Prevent unrelated repository-level tools from being copied into every stage card.
+- [x] Add regression tests for Docker, Terraform, Ansible, GitHub Actions, and mixed-tool stages using evidence-backed classifications.
+- [x] Run the full suite and build, inspect DEPI-GP cards, checkpoint, and push to `k-fathi/DevGraphOps/main`.

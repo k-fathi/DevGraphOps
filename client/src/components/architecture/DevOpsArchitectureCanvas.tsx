@@ -3,7 +3,7 @@
  * and limited olive, amber, and pink functional signals in place of blue or neon accents.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Clipboard, Download, FileCode2, FileImage, FileType2, GitBranch, LoaderCircle, Maximize2, Minus, Plus, ScanSearch, Save, Upload } from "lucide-react";
+import { AlertCircle, Clipboard, Download, FileCode2, FileImage, FileType2, GitBranch, LoaderCircle, Maximize2, Minus, Plus, RotateCcw, ScanSearch, Save, Upload } from "lucide-react";
 import { toPng, toSvg } from "html-to-image";
 import {
   Background,
@@ -315,6 +315,24 @@ export default function DevOpsArchitectureCanvas() {
       setShareMessage("Copy was blocked; use the browser address bar to share this view.");
     }
   }, [analysis, currentPreferences, repositoryUrl]);
+  const resetView = useCallback(() => {
+    setView(DEFAULT_ANALYSIS_PREFERENCES.view);
+    setJourneyMode(DEFAULT_ANALYSIS_PREFERENCES.journeyMode);
+    setPipelineExpanded(DEFAULT_ANALYSIS_PREFERENCES.pipelineExpanded);
+    setPipelineClosing(false);
+    setClusterExpanded(DEFAULT_ANALYSIS_PREFERENCES.clusterExpanded);
+    setExpandedNamespaceIds([]);
+    setExpandedWorkloadIds([]);
+    setServiceDeploymentFocus(false);
+    setEnvironmentFilter(DEFAULT_ANALYSIS_PREFERENCES.environmentFilter);
+    setNamespaceFilter(DEFAULT_ANALYSIS_PREFERENCES.namespaceFilter);
+    setRoutingMode(DEFAULT_ANALYSIS_PREFERENCES.routingMode);
+    setHoveredEdgeId(null);
+    setHoverHint("");
+    requestAnimationFrame(() => flow?.fitView({ padding: 0.13, duration: 220 }));
+    setShareMessage("View reset to defaults");
+  }, [flow]);
+
   const onSaveSettings = useCallback(() => {
     saveAnalysisPreferences(currentPreferences);
     setShareMessage("Analysis settings saved on this device");
@@ -371,6 +389,7 @@ export default function DevOpsArchitectureCanvas() {
           <button onClick={() => void onShare()} title="Copy a shareable analysis URL"><Clipboard size={13} /> Share</button>
           <button onClick={onSaveSettings} title="Save current analysis settings on this device"><Save size={13} /> Save settings</button>
           <button onClick={onLoadSettings} title="Load saved analysis settings"><Upload size={13} /> Load settings</button>
+          <button onClick={resetView} title="Reset journey, filters, expansions, and arrow lanes"><RotateCcw size={13} /> Reset view</button>
         </div>
         <div className="export-actions" aria-label="Diagram export">
           <span><Download size={13} /> Export</span>
@@ -425,7 +444,7 @@ export default function DevOpsArchitectureCanvas() {
           onNodeClick={onJourneyNodeClick}
           onNodeMouseEnter={(_event, node) => { const evidence = "evidence" in node.data ? node.data.evidence : undefined; setHoverHint(`${node.data.label}${evidence ? ` · Evidence: ${evidence}` : ""}`); }}
           onNodeMouseLeave={() => setHoverHint("")}
-          onEdgeMouseEnter={(_event, edge) => { setHoveredEdgeId(edge.id); setHoverHint(`${String(edge.label ?? "Relationship")} · ${edge.data?.evidence ?? "Evidence path not retained"}`); }}
+          onEdgeMouseEnter={(_event, edge) => { setHoveredEdgeId(edge.id); const source = edge.data?.sourceLabel ?? edge.source; const target = edge.data?.targetLabel ?? edge.target; const relation = String(edge.label ?? "Relationship"); setHoverHint(`${source} → ${target} · ${relation}${edge.data?.evidence ? ` · Evidence: ${edge.data.evidence}` : ""}`); }}
           onEdgeMouseLeave={() => { setHoveredEdgeId(null); setHoverHint(""); }}
           onEdgeClick={(_event, edge) => { const selection = selectRelationshipEvidence(edge.data?.evidence, edge.source, edge.target, String(edge.label ?? "Relationship evidence")); if (selection) setEvidenceSelection(selection); }}
           onMove={(_event, viewport) => setZoomPercent(Math.round(viewport.zoom * 100))}

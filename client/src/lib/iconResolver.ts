@@ -33,7 +33,6 @@ const localIconAssets: Record<string, string> = {
   postgres: "/manus-storage/postgres_35d04f66.svg",
   prometheus: "/manus-storage/prometheus_cb110430.svg",
   grafana: "/manus-storage/grafana_6c3cef4f.svg",
-  docker: "/manus-storage/dockerhub_9e8a951b.svg",
   "docker hub": "/manus-storage/dockerhub_9e8a951b.svg",
   "docker compose": "/manus-storage/docker-compose_ff2f0f37.png",
   users: "/manus-storage/users_f9a8ef34.svg",
@@ -55,6 +54,7 @@ const localIconAssets: Record<string, string> = {
 };
 
 const simpleIconNames: Record<string, string> = {
+  docker: "siDocker",
   gitlab: "siGitlab",
   jenkins: "siJenkins",
   ansible: "siAnsible",

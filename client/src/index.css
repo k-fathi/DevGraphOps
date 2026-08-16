@@ -264,6 +264,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid #79a643; outline-
 .architecture-handle--group { background: var(--group-color) !important; }
 .architecture-handle--route { opacity: 0.2; }
 .architecture-canvas .react-flow__edge path { filter: drop-shadow(0 0 1px rgba(220, 235, 148, 0.4)); vector-effect: non-scaling-stroke; }
+@keyframes journey-route-flow { to { stroke-dashoffset: -28; } }
+.architecture-canvas .react-flow__edge.journey-edge--active .react-flow__edge-path { animation: journey-route-flow 1.6s linear infinite; filter: drop-shadow(0 0 4px rgba(216, 237, 140, 0.62)); }
+@media (prefers-reduced-motion: reduce) { .architecture-canvas .react-flow__edge.journey-edge--active .react-flow__edge-path { animation: none; } }
 .architecture-canvas .react-flow__edge-text { font: 700 9px "IBM Plex Mono", monospace; letter-spacing: 0.02em; }
 .architecture-canvas .react-flow__edge-textbg { rx: 2; ry: 2; stroke: #383838; stroke-width: 0.6; }
 .canvas-navigation { position: absolute; right: 12px; bottom: 12px; z-index: 4; display: inline-flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid #505050; background: rgba(17,17,17,0.96); color: #d8d8d8; font: 700 9px/1 "IBM Plex Mono", monospace; }

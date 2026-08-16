@@ -9,7 +9,7 @@ import type { ContainerNodeData, ServiceNodeData } from "@/components/architectu
 
 export type ArchitectureView = "high" | "detailed";
 export type ArchitectureNode = Node<ContainerNodeData, "containerGroup"> | Node<ServiceNodeData, "devopsService"> | Node<ServiceNodeData, "pipelineStep">;
-export type ArchitectureEdge = Edge<{ kind: RelationKind; evidence?: string; routing?: "bottom" | "side" | "top" }>;
+export type ArchitectureEdge = Edge<{ kind: RelationKind; evidence?: string; routing?: "bottom" | "side" | "top"; sourceLabel?: string; targetLabel?: string }>;
 export type JourneyMode = "overview" | "user" | "devops";
 export type JourneyStep = { id: string; label: string; evidence?: string; parallel?: boolean };
 export type JourneyDefinition = { id: Exclude<JourneyMode, "overview">; title: string; summary: string; nodeIds: string[]; edgeIds: string[]; steps: JourneyStep[] };
@@ -441,5 +441,8 @@ export async function buildArchitectureLayout(analysis: RepositoryAnalysis, view
     edges.push(makeEdge("devops-engineer-pipeline", "devops-engineer", pipelineTarget, "operates", "deployment", pipeline[0].evidence));
   }
 
-  return { nodes, edges: Array.from(new Map(edges.map((edge) => [`${edge.source}-${edge.target}-${String(edge.label ?? "")}`, edge])).values()) };
+  const uniqueEdges = Array.from(new Map(edges.map((edge) => [`${edge.source}-${edge.target}-${String(edge.label ?? "")}`, edge])).values());
+  const labels = new Map(nodes.map((node) => [node.id, node.data.label]));
+  return { nodes, edges: uniqueEdges.map((edge) => ({ ...edge, data: { ...edge.data!, sourceLabel: labels.get(edge.source) ?? edge.source, targetLabel: labels.get(edge.target) ?? edge.target } })) };
+
 }
