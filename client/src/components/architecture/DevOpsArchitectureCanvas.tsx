@@ -16,6 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { architectureNodeTypes } from "@/components/architecture/nodes";
+import { ObstacleAwareEdge } from "@/components/architecture/ObstacleAwareEdge";
 import { buildArchitectureLayout, buildJourneyDefinitions, buildPipelinePlan, type ArchitectureEdge, type ArchitectureNode, type ArchitectureView, type JourneyDefinition, type JourneyMode } from "@/lib/architectureLayout";
 import { trpc } from "@/lib/trpc";
 import type { RepositoryAnalysis } from "@/lib/repositoryParser";
@@ -53,6 +54,7 @@ export default function DevOpsArchitectureCanvas() {
   const [flow, setFlow] = useState<ReactFlowInstance<ArchitectureNode, ArchitectureEdge> | null>(null);
   const { mutateAsync: analyzeRepository, isPending: loading } = trpc.repository.analyze.useMutation();
   const showPipelineDetails = pipelineExpanded || pipelineClosing;
+  const edgeTypes = useMemo(() => ({ obstacleAware: ObstacleAwareEdge }), []);
   const applyPreferences = useCallback((raw: Partial<AnalysisPreferences>) => {
     const preferences = { ...DEFAULT_ANALYSIS_PREFERENCES, ...raw };
     setView(preferences.view);
@@ -411,6 +413,7 @@ export default function DevOpsArchitectureCanvas() {
           nodes={nodes}
           edges={edges}
           nodeTypes={architectureNodeTypes}
+          edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={onJourneyNodeClick}

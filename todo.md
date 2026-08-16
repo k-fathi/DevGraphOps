@@ -238,4 +238,11 @@
 - [x] Improve explicit Zoom/Pan controls with readable state feedback while preserving React Flow navigation.
 - [x] Add interactive hover tooltips for nodes and edges that expose labels, relationship kinds, and evidence paths without cluttering the canvas.
 - [x] Add regression tests for Zoom/Pan controls and hover evidence guidance, then run the full test suite and production build.
-- [ ] Save a final checkpoint and push the interaction update to `k-fathi/DevGraphOps/main`.
+- [x] Save a final checkpoint and push the interaction update to `k-fathi/DevGraphOps/main`.
+
+## Obstacle-Aware Edge Routing
+- [x] Diagnose routes that cross Infrastructure and Cluster frames or their child content in the DEPI-GP screenshot.
+- [x] Create dedicated external lanes for Pipeline delivery, infrastructure provisioning, and user traffic so edges travel around section frames.
+- [x] Adjust section positions and edge handles without weakening evidence-only relationships or arrow direction.
+- [x] Add geometry and regression tests proving cross-section routes avoid the interior of obstacle frames.
+- [x] Re-run the full test suite, build, and DEPI-GP visual review, then checkpoint and push to `k-fathi/DevGraphOps/main`.

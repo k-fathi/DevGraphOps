@@ -9,7 +9,7 @@ import type { ContainerNodeData, ServiceNodeData } from "@/components/architectu
 
 export type ArchitectureView = "high" | "detailed";
 export type ArchitectureNode = Node<ContainerNodeData, "containerGroup"> | Node<ServiceNodeData, "devopsService"> | Node<ServiceNodeData, "pipelineStep">;
-export type ArchitectureEdge = Edge<{ kind: RelationKind; evidence?: string }>;
+export type ArchitectureEdge = Edge<{ kind: RelationKind; evidence?: string; routing?: "bottom" | "top" }>;
 export type JourneyMode = "overview" | "user" | "devops";
 export type JourneyStep = { id: string; label: string; evidence?: string; parallel?: boolean };
 export type JourneyDefinition = { id: Exclude<JourneyMode, "overview">; title: string; summary: string; nodeIds: string[]; edgeIds: string[]; steps: JourneyStep[] };
@@ -207,8 +207,9 @@ function makeEdge(id: string, source: string, target: string, label: string, kin
   const isProvisioning = source === "infrastructure" && target === "cluster" && label === "provisions Kubernetes";
   const isRuntimeTraffic = kind === "traffic" && !isUserRoute;
   const isResourceRelation = kind === "dependency" && !isManifestShortcut && !isProvisioning;
+  const routing = isManifestShortcut || isProvisioning ? "bottom" : undefined;
   return {
-    id, source, target, type: "step", animated: style.animated, label, data: { kind, evidence }, selectable: false, zIndex: 2,
+    id, source, target, type: routing ? "obstacleAware" : "step", animated: style.animated, label, data: { kind, evidence, routing }, selectable: false, zIndex: 2,
     sourceHandle: isUserRoute ? "out" : isManifestShortcut ? "delivery-out" : isInfrastructureValidation ? "infrastructure-out" : isProvisioning ? "cluster-out" : isRuntimeTraffic ? "traffic-out" : isResourceRelation ? "relation-out" : "out",
     targetHandle: isUserRoute ? "journey-in" : isManifestShortcut ? "delivery-in" : isInfrastructureValidation ? "infrastructure-in" : isProvisioning ? "provision-in" : isRuntimeTraffic ? "traffic-in" : isResourceRelation ? "relation-in" : "in",
     markerEnd: { type: MarkerType.ArrowClosed, color: style.stroke, width: 18, height: 18 },

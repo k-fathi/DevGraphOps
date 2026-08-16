@@ -211,13 +211,22 @@ describe("DEPI-GP cross-section continuity", () => {
     const bridgeEdges = new Map(layout.edges.map((edge) => [edge.label, edge]));
 
     expect(bridgeEdges.get("validates infrastructure")).toMatchObject({ source: "cicd", target: "infrastructure", sourceHandle: "infrastructure-out", targetHandle: "infrastructure-in" });
+    expect(bridgeEdges.get("provisions Kubernetes")).toMatchObject({ type: "obstacleAware", data: { routing: "bottom" } });
     expect(bridgeEdges.get("provisions Kubernetes")).toMatchObject({ source: "infrastructure", target: "cluster", sourceHandle: "cluster-out", targetHandle: "provision-in" });
-    expect(bridgeEdges.get("updates manifest")).toMatchObject({ sourceHandle: "delivery-out", targetHandle: "delivery-in" });
+    expect(bridgeEdges.get("updates manifest")).toMatchObject({ sourceHandle: "delivery-out", targetHandle: "delivery-in", type: "obstacleAware", data: { routing: "bottom" } });
     expect(layout.edges.filter((edge) => edge.label === "updates manifest")).toHaveLength(1);
     const devOpsJourney = buildJourneyDefinitions(analysis as any, layout.nodes, layout.edges).find((journey) => journey.id === "devops")!;
     expect(devOpsJourney.steps.map((step) => step.label)).toEqual(expect.arrayContaining(["Pipeline · 1 declared stages", "Kubernetes Cluster"]));
     const byId = new Map(layout.nodes.map((node) => [node.id, node]));
     expect(byId.get("cicd")!.position.x).toBeLessThan(byId.get("infrastructure")!.position.x);
     expect(byId.get("infrastructure")!.position.x).toBeLessThan(byId.get("cluster")!.position.x);
+  });
+});
+
+describe("obstacle-aware cross-section routing", () => {
+  it("keeps bottom-lane bridges below both section boundaries", async () => {
+    const { buildExternalRoutePath } = await import("@/components/architecture/ObstacleAwareEdge");
+    const path = buildExternalRoutePath(420, 488, 1260, 504, "bottom", 96);
+    expect(path).toBe("M 420 488 L 420 600 L 1260 600 L 1260 504");
   });
 });
